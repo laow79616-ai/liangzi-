@@ -3,8 +3,8 @@ from __future__ import annotations
 import json, re, sqlite3, subprocess, uuid
 from datetime import datetime
 from pathlib import Path
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent
@@ -81,6 +81,69 @@ def upsert_acc(c, plat, names, extra=0):
 
 init()
 app = FastAPI()
+ADMIN_USER = "admin"
+ADMIN_PASS = "Ab123987"
+SESSIONS = set()
+
+LOGIN_HTML = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>登录 · 短剧切片库</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0f16;color:#e8eef8;font-family:sans-serif}
+.box{width:min(360px,92vw);background:#171e2b;border:1px solid #273044;border-radius:16px;padding:28px}
+h1{font-size:20px;margin:0 0 18px}
+label{display:block;font-size:12px;color:#8b9bb4;margin:10px 0 6px}
+input{width:100%;padding:10px;border-radius:10px;border:1px solid #33445e;background:#0d131d;color:#fff}
+button{width:100%;margin-top:16px;padding:10px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer}
+.err{color:#fca5a5;font-size:13px;min-height:18px;margin-top:8px}
+</style></head><body><div class="box">
+<h1>短剧切片库登录</h1>
+<label>用户名</label><input id="u" autocomplete="username">
+<label>密码</label><input id="p" type="password" autocomplete="current-password">
+<div class="err" id="e"></div>
+<button onclick="go()">登录</button>
+</div>
+<script>
+async function go(){
+  const fd=new FormData();
+  fd.append('username',u.value);fd.append('password',p.value);
+  const r=await fetch('/api/login',{method:'POST',body:fd});
+  if(r.ok) location.href='/';
+  else e.textContent='账号或密码错误';
+}
+p.addEventListener('keydown',ev=>{if(ev.key==='Enter')go()});
+</script></body></html>"""
+
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    path = request.url.path
+    if path in ("/login", "/api/login", "/health"):
+        return await call_next(request)
+    if request.cookies.get("clip_sess") in SESSIONS:
+        return await call_next(request)
+    if path.startswith("/api/") or path.startswith("/media/"):
+        return JSONResponse({"detail": "未登录"}, status_code=401)
+    return RedirectResponse("/login", status_code=302)
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return HTMLResponse(LOGIN_HTML)
+
+@app.post("/api/login")
+def api_login(username: str = Form(""), password: str = Form("")):
+    if username != ADMIN_USER or password != ADMIN_PASS:
+        raise HTTPException(401, "账号或密码错误")
+    token = uuid.uuid4().hex
+    SESSIONS.add(token)
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie("clip_sess", token, httponly=True, samesite="lax", max_age=60*60*24*30)
+    return resp
+
+@app.post("/api/logout")
+def api_logout(request: Request):
+    SESSIONS.discard(request.cookies.get("clip_sess"))
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("clip_sess")
+    return resp
+
 app.mount("/media", StaticFiles(directory=str(MEDIA)), name="media")
 
 @app.get("/", response_class=HTMLResponse)
