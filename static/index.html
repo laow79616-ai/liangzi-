@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>短剧切片数据分析库</title>
+<style>
+:root {
+  --bg: #0b0f16;
+  --bg2: #121826;
+  --card: #171e2b;
+  --line: #273044;
+  --txt: #e8eef8;
+  --dim: #8b97ab;
+  --acc: #5eead4;
+  --acc2: #38bdf8;
+  --warn: #fbbf24;
+  --danger: #fb7185;
+  --ok: #34d399;
+  --fb: #1877f2;
+  --x: #e7e9ea;
+  --ig: #e1306c;
+  --tt: #25f4ee;
+  --tg: #2aabee;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: radial-gradient(1200px 600px at 10% -10%, #123 0%, transparent 50%),
+              radial-gradient(900px 500px at 110% 0%, #14203a 0%, transparent 45%),
+              var(--bg);
+  color: var(--txt);
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+.app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+.side {
+  background: #0e1420;
+  border-right: 1px solid var(--line);
+  padding: 20px 14px;
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column; overflow: auto;
+}
+.logo { font-weight: 700; letter-spacing: .04em; font-size: 15px; }
+.logo small { display: block; color: var(--dim); font-weight: 400; margin-top: 4px; font-size: 12px; }
+.nav { margin-top: 28px; display: flex; flex-direction: column; gap: 6px; }
+.nav button {
+  background: transparent; border: 0; text-align: left; padding: 10px 12px;
+  border-radius: 10px; cursor: pointer; color: var(--dim);
+}
+.nav button.active, .nav button:hover { background: #1a2436; color: var(--txt); }
+.nav .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+.main { padding: 22px 26px 60px; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+h1 { font-size: 22px; font-weight: 650; }
+.tools { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; padding-top: 0; }
+.tools input, .tools select {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; width: 100%;
+}
+.tools .btn, .tools a.btn { width: 100%; text-align: center; text-decoration: none; }
+.btn {
+  background: linear-gradient(180deg, #2a3b55, #1c283b);
+  border: 1px solid #33445e; border-radius: 10px; padding: 8px 14px; cursor: pointer;
+}
+.btn.primary { background: linear-gradient(180deg, #2dd4bf, #0f766e); border-color: #5eead4; color: #042f2e; font-weight: 650; }
+.btn.ghost { background: transparent; }
+.btn.danger { background: #3a1820; border-color: #7f1d1d; color: #fecaca; }
+.stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 12px 0 16px; }
+.stat {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+}
+.stat b { display: block; font-size: 20px; margin-top: 4px; }
+.stat span { color: var(--dim); font-size: 12px; }
+.gauges {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr 1.1fr;
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.gauge-card {
+  background: linear-gradient(180deg, #182132, #121a28);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px 16px 16px;
+}
+.gauge-card h3 { font-size: 13px; color: var(--dim); font-weight: 500; margin-bottom: 8px; }
+.gauge-row { display: flex; align-items: center; gap: 16px; }
+.gauge-svg { width: 118px; height: 118px; flex: 0 0 118px; }
+.gauge-num { font-size: 28px; font-weight: 700; letter-spacing: .02em; }
+.gauge-num small { font-size: 12px; color: var(--dim); font-weight: 400; margin-left: 4px; }
+.plat-gauges { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.plat-g {
+  background: #101826; border: 1px solid var(--line); border-radius: 14px; padding: 10px;
+  text-align: center;
+}
+.plat-g .n { font-size: 22px; font-weight: 700; margin: 4px 0 2px; }
+.plat-g .s { color: var(--dim); font-size: 11px; }
+@media (max-width: 1100px) {
+  .gauges { grid-template-columns: 1fr; }
+  .plat-gauges { grid-template-columns: 1fr 1fr; }
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px;
+  cursor: pointer; transition: .15s transform, .15s border-color;
+}
+.card:hover { transform: translateY(-2px); border-color: #3d516e; }
+.card .code { color: var(--acc); font-size: 12px; }
+.card h3 { font-size: 16px; margin: 6px 0 8px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--dim); font-size: 12px; }
+.tag { background: #222c3d; border-radius: 999px; padding: 2px 8px; }
+.overlay {
+  position: fixed; inset: 0; background: rgba(4,8,16,.72); display: none; z-index: 20;
+  align-items: stretch; justify-content: flex-end;
+}
+.overlay.show { display: flex; }
+.drawer {
+  width: min(1080px, 96vw); background: #101722; border-left: 1px solid var(--line);
+  overflow: auto; padding: 20px 22px 40px;
+}
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0; }
+.tabs button {
+  border: 1px solid var(--line); background: #151c29; border-radius: 999px; padding: 7px 12px; cursor: pointer;
+}
+.tabs button.on { border-color: var(--acc); color: var(--acc); }
+.section { background: #151c28; border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.section h4 { margin-bottom: 10px; font-size: 14px; color: #c9d6ea; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+input, select, textarea {
+  width: 100%; background: #0d131d; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+}
+textarea { min-height: 84px; resize: vertical; }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.item {
+  background: #0d131d; border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+  display: flex; justify-content: space-between; gap: 10px; align-items: flex-start;
+}
+.item video, .item img { max-width: 160px; max-height: 90px; border-radius: 8px; background: #000; }
+.small { font-size: 12px; color: var(--dim); white-space: pre-wrap; }
+.pager { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
+.hw table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.hw th, .hw td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #1e293b; }
+.empty { color: var(--dim); padding: 28px; text-align: center; }
+@media (max-width: 980px) {
+  .app { grid-template-columns: 1fr; }
+  .side { height: auto; position: relative; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .row, .row3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">短剧切片数据分析库
+      <small>素材面板 · 1000部目标库</small>
+    </div>
+    <nav class="nav" id="nav">
+      <button class="active" data-view="dashboard"><span class="dot" style="background:#fbbf24"></span>数据仪表</button>
+      <button data-view="library"><span class="dot" style="background:#5eead4"></span>作品总库</button>
+      <button data-view="facebook"><span class="dot" style="background:#1877f2"></span>Facebook</button>
+      <button data-view="twitter"><span class="dot" style="background:#e7e9ea"></span>推特 / X</button>
+      <button data-view="instagram"><span class="dot" style="background:#e1306c"></span>Instagram</button>
+      <button data-view="tiktok"><span class="dot" style="background:#25f4ee"></span>TikTok</button>
+      <button data-view="telegram"><span class="dot" style="background:#2aabee"></span>Telegram</button>
+    </nav>
+    <div class="tools" id="toolBar">
+      <input id="q" placeholder="搜索标题 / 编号 / 剧名 / 关键词" />
+      <select id="status">
+        <option value="">全部状态</option>
+        <option value="draft">草稿</option>
+        <option value="ready">可分发</option>
+        <option value="published">已发布</option>
+        <option value="archived">归档</option>
+      </select>
+      <button class="btn" onclick="doSearch()">搜索</button>
+      <button class="btn primary" onclick="openCreate()">+ 新建短剧</button>
+      <a class="btn" href="/api/export/works.csv">导出分析表</a>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="top">
+      <div>
+        <h1 id="pageTitle">数据仪表</h1>
+        <div class="small" id="pageSub">每部短剧约 60 秒，按平台归档视频 / 图片 / 文案 / 关键词 / 跨平台切片 / 发布数据</div>
+      </div>
+    </div>
+    <div class="gauges" id="gauges"></div>
+    <div class="stats" id="stats"></div>
+    <div id="content"></div>
+    <div class="pager" id="pager"></div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="drawer" id="drawer"></div>
+</div>
+
+<script>
+const PLAT = {
+  facebook: "Facebook",
+  twitter: "推特 / X",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  telegram: "Telegram"
+};
+let view = "dashboard";
+let page = 1;
+let currentId = null;
+let currentPlat = "tiktok";
+
+document.getElementById("nav").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  document.querySelectorAll(".nav button").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  view = b.dataset.view;
+  page = 1;
+  const titles = {
+    library: "作品总库",
+    dashboard: "数据仪表",
+    facebook: "Facebook 素材区",
+    twitter: "推特 / X 素材区",
+    instagram: "Instagram 素材区",
+    tiktok: "TikTok 素材区",
+    telegram: "Telegram 素材区"
+  };
+  document.getElementById("pageTitle").textContent = titles[view];
+  refresh();
+});
+
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  if (!r.ok) {
+    let msg = await r.text();
+    try { msg = JSON.parse(msg).detail || msg; } catch(e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+function fmtBytes(n) {
+  if (!n) return "0 B";
+  const u = ["B","KB","MB","GB","TB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length-1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + " " + u[i];
+}
+
+async function refresh() {
+  await loadStats();
+  const showDash = view === "dashboard";
+  document.getElementById("gauges").style.display = showDash ? "" : "none";
+  document.getElementById("stats").style.display = showDash ? "" : "none";
+  if (showDash) return renderDashboard();
+  await loadWorks();
+}
+
+function ring(value, max, color) {
+  const m = Math.max(max, 1);
+  const pct = Math.max(0, Math.min(1, value / m));
+  const r = 48, c = 2 * Math.PI * r;
+  const dash = (pct * c).toFixed(1);
+  return `<svg class="gauge-svg" viewBox="0 0 120 120">
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="#223044" stroke-width="10"/>
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="${color}" stroke-width="10"
+      stroke-linecap="round" stroke-dasharray="${dash} ${c}" transform="rotate(-90 60 60)"/>
+    <text x="60" y="66" text-anchor="middle" fill="#e8eef8" font-size="18" font-weight="700">${Number(value).toLocaleString()}</text>
+  </svg>`;
+}
+
+async function loadStats() {
+  const s = await api("/api/stats");
+  window._stats = s;
+  const mats = s.total_materials || 0;
+  const acc = s.found_accounts || 0;
+  const pubs = s.peer_publishes || 0;
+  document.getElementById("gauges").innerHTML = `
+    <div class="gauge-card">
+      <h3>总素材</h3>
+      <div class="gauge-row">
+        ${ring(mats, Math.max(100, mats), "#5eead4")}
+        <div>
+          <div class="gauge-num">${mats}<small>件</small></div>
+          <div class="small">视频/切片 ${s.videos} · 图片 ${s.images}<br>文案 ${s.copies} · 关键词包 ${s.keywords || 0}<br>短剧主档 ${s.works} / 1000</div>
+        </div>
+      </div>
+    </div>
+    <div class="gauge-card">
+      <h3>找到的各平台账号</h3>
+      <div class="plat-gauges">
+        ${(s.platform_gauges || []).map(p => `
+          <div class="plat-g">
+            <div class="s">${p.name}</div>
+            <div class="n">${p.accounts}</div>
+            <div class="s">发布 ${Number(p.publishes).toLocaleString()} 次</div>
+          </div>`).join("")}
+      </div>
+      <div class="small" style="margin-top:8px">合计找到账号 ${acc} 个</div>
+    </div>
+    <div class="gauge-card">
+      <h3>对方总发布次数</h3>
+      <div class="gauge-row">
+        ${ring(pubs, Math.max(50, pubs), "#fbbf24")}
+        <div>
+          <div class="gauge-num">${Number(pubs).toLocaleString()}<small>次</small></div>
+          <div class="small">按分析栏「多少账号在发布」累加<br>记录批次 ${s.publish_batches || 0} 批<br>累计播放 ${Number(s.total_plays).toLocaleString()}</div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><span>短剧部数</span><b>${s.works} / 1000</b></div>
+    <div class="stat"><span>总素材</span><b>${mats}</b></div>
+    <div class="stat"><span>找到账号</span><b>${acc}</b></div>
+    <div class="stat"><span>对方发布</span><b>${Number(pubs).toLocaleString()} 次</b></div>
+    <div class="stat"><span>累计播放</span><b>${Number(s.total_plays).toLocaleString()}</b></div>
+    <div class="stat"><span>已用体积</span><b>${s.media_gb} GB</b></div>`;
+}
+
+
+
+function toast(msg) {
+  let el = document.getElementById("toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast";
+    el.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f766e;color:#fff;padding:10px 16px;border-radius:10px;z-index:99;font-size:14px";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.display = "block";
+  clearTimeout(window._tt);
+  window._tt = setTimeout(() => el.style.display = "none", 1600);
+}
+async function copyVideoLink(path) {
+  const url = location.origin + path;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("已复制视频链接，可粘贴到聊天窗口");
+  } catch (e) {
+    prompt("复制这个链接", url);
+  }
+}
+function dragVideo(e, path, title) {
+  const url = location.origin + path;
+  const name = (title || "video").replace(/[^\w\u4e00-\u9fa5]+/g, "_") + ".mp4";
+  e.dataTransfer.setData("text/uri-list", url);
+  e.dataTransfer.setData("text/plain", url);
+  e.dataTransfer.setData("DownloadURL", "video/mp4:" + name + ":" + url);
+}
+
+function doSearch() {
+  view = "library";
+  page = 1;
+  document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("active", x.dataset.view === "library"));
+  document.getElementById("pageTitle").textContent = "作品总库";
+  const g = document.getElementById("gauges");
+  const s = document.getElementById("stats");
+  if (g) g.style.display = "none";
+  if (s) s.style.display = "none";
+  loadWorks();
+}
+
+async function loadWorks() {
+  const q = document.getElementById("q").value.trim();
+  const status = document.getElementById("status").value;
+  const plat = view in PLAT ? view : "";
+  const data = await api(`/api/works?q=${encodeURIComponent(q)}&status=${status}&platform=${plat}&page=${page}&page_size=24`);
+  const box = document.getElementById("content");
+  if (!data.items.length) {
+    box.innerHTML = `<div class="empty">暂无作品。点击右上角「新建短剧」入库。</div>`;
+    document.getElementById("pager").innerHTML = "";
+    return;
+  }
+  box.innerHTML = `<div class="grid">${data.items.map(w => `
+    <div class="card" onclick="openWork(${w.id})">
+      <div class="code" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span>${w.code} · ${({draft:'草稿',ready:'可分发',published:'已发布',archived:'归档'}[w.status]||w.status)}</span>
+        <button class="btn danger" title="删除" onclick="event.stopPropagation();delWork(${w.id})" style="padding:4px 8px;flex:none">删除</button>
+      </div>
+      <h3>${esc(w.title)}</h3>
+      ${w.video_url ? `<video src="${w.video_url}" controls preload="metadata" draggable="true"
+        style="width:100%;max-height:220px;border-radius:10px;background:#000;margin:8px 0;cursor:grab"
+        onclick="event.stopPropagation();copyVideoLink('${w.video_url}')"
+        ondragstart="dragVideo(event,'${w.video_url}','${esc(w.title||"video")}')"></video>` : (w.cover_url?`<img src="${w.cover_url}" style="width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin:8px 0">`:``)}
+      <div class="meta" style="margin-top:8px">
+        ${w.video_url ? `<a class="btn primary" href="${w.video_url}" download onclick="event.stopPropagation()">下载视频</a>` : ""}
+        ${w.cover_url ? `<a class="btn primary" href="${w.cover_url}" download onclick="event.stopPropagation()">下载图片</a>` : ""}
+        <label class="btn" onclick="event.stopPropagation()" style="cursor:pointer">添加图片
+          <input type="file" accept="image/*" style="display:none" onchange="addCardImage(event,${w.id})">
+        </label>
+      </div>
+      ${(w.images&&w.images.length)?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${w.images.map(u=>`<a href="${u}" download onclick="event.stopPropagation()"><img src="${u}" style="width:88px;height:88px;object-fit:cover;border-radius:8px;background:#000"></a>`).join("")}</div>`:""}
+      <div class="meta">
+        <span class="tag">${esc(w.series_name || "单集")}</span>
+        <span class="tag">${w.duration_sec || 60}s</span>
+        <span class="tag">视频 ${w.video_count}</span>
+        <span class="tag">图 ${w.image_count}</span>
+        <span class="tag">切片 ${w.clip_count}</span>
+        <span class="tag">文案 ${w.copy_count}</span>
+        <span class="tag">播放 ${Number(w.total_plays).toLocaleString()}</span>
+        <span class="tag">账号 ${w.total_accounts}</span>
+      </div>
+    </div>`).join("")}</div>`;
+  const pages = Math.max(1, Math.ceil(data.total / data.page_size));
+  document.getElementById("pager").innerHTML = `
+    <button class="btn" onclick="page=Math.max(1,page-1);loadWorks()">上一页</button>
+    <span class="badge">${data.page} / ${pages} · 共 ${data.total} 部</span>
+    <button class="btn" onclick="page=Math.min(${pages},page+1);loadWorks()">下一页</button>`;
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+function openCreate() {
+  currentId = null;
+  document.getElementById("overlay").classList.add("show");
+  document.getElementById("drawer").innerHTML = workForm();
+}
+
+async function openWork(id) {
+  currentId = id;
+  const data = await api(`/api/works/${id}`);
+  renderDrawer(data);
+  document.getElementById("overlay").classList.add("show");
+}
+
+function closeDrawer() {
+  document.getElementById("overlay").classList.remove("show");
+}
+
+function workForm(w = {}) {
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2>${w.id ? "编辑短剧 " + esc(w.code) : "新建短剧"}</h2>
+      <button class="btn ghost" onclick="closeDrawer()">关闭</button>
+    </div>
+    <div class="section">
+      <div class="row">
+        <div><label>标题 *</label><input name="title" value="${esc(w.title||"")}" /></div>
+        <div><label>剧名 / 系列</label><input name="series_name" value="${esc(w.series_name||"")}" /></div>
+      </div>
+      <div class="row3" style="margin-top:8px">
+        <div><label>集数</label><input name="episode_no" value="${esc(w.episode_no||"")}" /></div>
+        <div><label>时长（秒）</label><input name="duration_sec" type="number" value="${w.duration_sec||60}" /></div>
+        <div><label>状态</label>
+          <select name="status">
+            ${[["draft","草稿"],["ready","可分发"],["published","已发布"],["archived","归档"]].map(([s,n]) => `<option ${w.status===s?"selected":""} value="${s}">${n}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>类型</label><input name="genre" placeholder="甜宠 / 战神 / 重生..." value="${esc(w.genre||"")}" /></div>
+        <div><label>语言</label><input name="language" value="${esc(w.language||"zh")}" /></div>
+      </div>
+      <div style="margin-top:8px"><label>总库关键词（逗号分隔）</label>
+        <input name="master_keywords" value="${esc(w.master_keywords||"")}" /></div>
+      <div style="margin-top:8px"><label>简介</label>
+        <textarea name="description">${esc(w.description||"")}</textarea></div>
+      <div class="row" style="margin-top:10px">
+        <div><label>从本地添加成片视频</label>
+          <input id="localVideo" type="file" accept="video/*" /></div>
+        <div><label>从本地添加封面图</label>
+          <input id="localImage" type="file" accept="image/*" /></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>视频归属平台</label>
+          <select id="localPlat">${Object.entries(PLAT).map(([k,v]) => `<option value="${k}" ${k==="tiktok"?"selected":""}>${v}</option>`).join("")}</select>
+        </div>
+        <div><label>可选切片（同条高光）</label>
+          <input id="localClip" type="file" accept="video/*" /></div>
+      </div>
+      <div style="margin-top:10px">
+        <button class="btn primary" onclick="saveWork(${w.id||0})">保存作品</button>
+        ${w.id ? `<button class="btn danger" onclick="delWork(${w.id})">删除整部</button>` : ""}
+      </div>
+    </div>`;
+}
+
+async function uploadLocalFiles(wid, pack) {
+  if (!pack) return;
+  const plat = pack.plat || "tiktok";
+  for (const [file, typ] of pack.files) {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("platform", plat);
+    fd.append("asset_type", typ);
+    if (typ === "clip") fd.append("highlight_note", "新建时本地切片");
+    await api(`/api/works/${wid}/assets`, { method: "POST", body: fd });
+  }
+}
+function grabLocalFiles() {
+  const plat = (document.getElementById("localPlat") || {}).value || "tiktok";
+  const files = [];
+  const jobs = [["localVideo","video"],["localImage","image"],["localClip","clip"]];
+  for (const [eid, typ] of jobs) {
+    const el = document.getElementById(eid);
+    if (el && el.files && el.files[0]) files.push([el.files[0], typ]);
+  }
+  return { plat, files };
+}
+
+async function saveWork(id) {
+  const box = document.getElementById("drawer");
+  const btn = box.querySelector(".btn.primary");
+  if (btn) { btn.disabled = true; btn.textContent = "保存中..."; }
+  const fd = new FormData();
+  box.querySelectorAll("input[name],select[name],textarea[name]").forEach(el => fd.append(el.name, el.value));
+  if (!fd.get("title")) { if (btn) { btn.disabled=false; btn.textContent="保存作品"; } return alert("请填写标题"); }
+  let wid = id;
+  try {
+    if (id) {
+      await api(`/api/works/${id}`, { method: "PUT", body: fd });
+    } else {
+      const r = await api("/api/works", { method: "POST", body: fd });
+      wid = r.id;
+    }
+    const pack = grabLocalFiles();
+    view = "library";
+    page = 1;
+    document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("active", x.dataset.view === "library"));
+    document.getElementById("pageTitle").textContent = "作品总库";
+    const g = document.getElementById("gauges");
+    const s = document.getElementById("stats");
+    if (g) g.style.display = "none";
+    if (s) s.style.display = "none";
+    closeDrawer();
+    loadWorks();
+    if (btn) btn.textContent = "正在上传视频...";
+    try {
+      await uploadLocalFiles(wid, pack);
+    } catch (ue) {
+      console.error(ue);
+    }
+    loadWorks();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "保存作品"; }
+    alert("保存失败：" + e.message);
+  }
+}
+
+async function delWork(id) {
+  await api(`/api/works/${id}`, { method: "DELETE" });
+  closeDrawer();
+  loadWorks();
+}
+
+function renderDrawer(data) {
+  const w = data.work;
+  currentPlat = currentPlat in PLAT ? currentPlat : "tiktok";
+  document.getElementById("drawer").innerHTML = `
+    ${workForm(w)}
+    <div class="tabs">
+      ${Object.entries(PLAT).map(([k,v]) => `<button class="${k===currentPlat?"on":""}" onclick="currentPlat='${k}';openWork(${w.id})">${v}</button>`).join("")}
+    </div>
+    ${platformPanel(w, data, currentPlat)}
+  `;
+}
+
+function platformPanel(w, data, p) {
+  const assets = data.assets_by_platform[p] || {videos:[],images:[],clips:[]};
+  const copies = data.copies.filter(c => c.platform === p || c.platform === "all");
+  const kws = data.keywords.filter(c => c.platform === p || c.platform === "all");
+  const ans = data.analytics.filter(c => c.platform === p);
+  return `
+    <div class="section">
+      <h4>${PLAT[p]} · 视频保存区</h4>
+      <input type="file" accept="video/*" onchange="upAsset(${w.id},'${p}','video',this)" />
+      <div class="list" style="margin-top:8px">${assets.videos.map(assetItem).join("") || `<div class="small">还没有该平台成片</div>`}</div>
+    </div>
+    <div class="section">
+      <h4>${PLAT[p]} · 图片保存区</h4>
+      <input type="file" accept="image/*" onchange="upAsset(${w.id},'${p}','image',this)" />
+      <div class="list" style="margin-top:8px">${assets.images.map(assetItem).join("") || `<div class="small">封面 / 分镜图 / 海报</div>`}</div>
+    </div>
+    <div class="section">
+      <h4>${PLAT[p]} · 文案保存区</h4>
+      <div class="row">
+        <div><label>标题</label><input id="copyTitle" placeholder="发布标题" /></div>
+        <div><label>类型</label>
+          <select id="copyType"><option value="main">主文案</option><option value="alt">备选</option><option value="hook">钩子</option><option value="cross">跨平台切片文案</option></select>
+        </div>
+      </div>
+      <label style="margin-top:8px">正文</label>
+      <textarea id="copyBody" placeholder="平台文案、话题、引导语"></textarea>
+      <button class="btn" style="margin-top:8px" onclick="addCopy(${w.id},'${p}')">保存文案</button>
+      <div class="list" style="margin-top:8px">${copies.map(c => `
+        <div class="item"><div><b>${esc(c.copy_type)} · ${esc(c.title)}</b><div class="small">${esc(c.body)}</div></div>
+        <button class="btn danger" onclick="delCopy(${c.id},${w.id})">删</button></div>`).join("")}</div>
+    </div>
+    <div class="section">
+      <h4>${PLAT[p]} · 关键词保存区</h4>
+      <input id="kwWords" placeholder="关键词，逗号分隔" />
+      <input id="kwNote" placeholder="备注：投放词 / 搜索词 / 标签" style="margin-top:6px" />
+      <button class="btn" style="margin-top:8px" onclick="addKw(${w.id},'${p}')">保存关键词</button>
+      <div class="list" style="margin-top:8px">${kws.map(k => `
+        <div class="item"><div><b>${esc(k.words)}</b><div class="small">${esc(k.note)}</div></div>
+        <button class="btn danger" onclick="delKw(${k.id},${w.id})">删</button></div>`).join("")}</div>
+    </div>
+    <div class="section">
+      <h4>同视频 · 其他平台精彩切片保存区</h4>
+      <div class="small">把同一部短剧在其他平台剪出的高光片段挂到当前平台档案下，并写切片文案。</div>
+      <div class="row" style="margin-top:8px">
+        <div><label>来源平台</label>
+          <select id="clipSrc">${Object.keys(PLAT).map(k => `<option value="${k}">${PLAT[k]}</option>`).join("")}</select>
+        </div>
+        <div><label>切片说明</label><input id="clipNote" placeholder="开头3秒钩子 / 反转点 / 名场面" /></div>
+      </div>
+      <label style="margin-top:8px">切片配套文案</label>
+      <textarea id="clipCopy" placeholder="该切片在本平台使用的文案"></textarea>
+      <input type="file" accept="video/*" style="margin-top:8px" onchange="upClip(${w.id},'${p}',this)" />
+      <div class="list" style="margin-top:8px">${assets.clips.map(assetItem).join("") || `<div class="small">暂无跨平台切片</div>`}</div>
+    </div>
+    <div class="section">
+      <h4>同视频分析数据填写栏 · ${PLAT[p]}</h4>
+      <div class="row3">
+        <div><label>什么时间发布</label><input id="anTime" type="datetime-local" /></div>
+        <div><label>播放量多少</label><input id="anPlay" type="number" value="0" /></div>
+        <div><label>多少账号在发布</label><input id="anAcc" type="number" value="1" /></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>用的文案是什么</label><textarea id="anCopy"></textarea></div>
+        <div><label>标题是什么</label><textarea id="anTitle"></textarea></div>
+      </div>
+      <div class="row3" style="margin-top:8px">
+        <div><label>账号名单（可选）</label><input id="anNames" placeholder="账号A, 账号B" /></div>
+        <div><label>点赞</label><input id="anLikes" type="number" value="0" /></div>
+        <div><label>评论 / 转发</label>
+          <div style="display:flex;gap:6px">
+            <input id="anCmt" type="number" value="0" placeholder="评论" />
+            <input id="anShare" type="number" value="0" placeholder="转发" />
+          </div>
+        </div>
+      </div>
+      <label style="margin-top:8px">备注</label>
+      <input id="anNotes" placeholder="投放时段、完播、是否测过备选文案" />
+      <button class="btn primary" style="margin-top:10px" onclick="addAn(${w.id},'${p}')">写入分析库</button>
+      <div class="list" style="margin-top:10px">${ans.map(a => `
+        <div class="item">
+          <div>
+            <b>${esc(a.publish_time || "未填时间")} · 播放 ${Number(a.play_count).toLocaleString()} · ${a.account_count} 个账号</b>
+            <div class="small">标题：${esc(a.used_title)}
+文案：${esc(a.used_copy)}
+账号：${esc(a.account_names)}
+赞 ${a.likes} / 评 ${a.comments} / 转 ${a.shares}
+${esc(a.notes)}</div>
+          </div>
+          <button class="btn danger" onclick="delAn(${a.id},${w.id})">删</button>
+        </div>`).join("") || `<div class="small">还没有该平台的发布记录</div>`}</div>
+    </div>`;
+}
+
+function assetItem(a) {
+  const media = a.asset_type === "image"
+    ? `<img src="${a.url}" alt="">`
+    : `<video src="${a.url}" controls></video>`;
+  return `<div class="item">
+    <div>${media}
+      <div class="small">${esc(a.filename)} · ${fmtBytes(a.size_bytes)} · ${a.duration_sec||0}s
+${a.source_platform ? "来源 " + a.source_platform : ""} ${esc(a.highlight_note||"")}
+${esc(a.clip_copy||a.caption||"")}</div>
+    </div>
+    <button class="btn danger" onclick="delAsset(${a.id},${currentId})">删</button>
+  </div>`;
+}
+
+async function upAsset(id, plat, type, input) {
+  const f = input.files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("platform", plat);
+  fd.append("asset_type", type);
+  fd.append("caption", "");
+  await api(`/api/works/${id}/assets`, { method: "POST", body: fd });
+  openWork(id); loadWorks();
+}
+
+async function upClip(id, plat, input) {
+  const f = input.files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("platform", plat);
+  fd.append("asset_type", "clip");
+  fd.append("source_platform", document.getElementById("clipSrc").value);
+  fd.append("highlight_note", document.getElementById("clipNote").value);
+  fd.append("clip_copy", document.getElementById("clipCopy").value);
+  await api(`/api/works/${id}/assets`, { method: "POST", body: fd });
+  openWork(id); loadWorks();
+}
+
+async function addCopy(id, plat) {
+  const body = document.getElementById("copyBody").value.trim();
+  if (!body) return alert("文案不能空");
+  const fd = new FormData();
+  fd.append("platform", plat);
+  fd.append("copy_type", document.getElementById("copyType").value);
+  fd.append("title", document.getElementById("copyTitle").value);
+  fd.append("body", body);
+  await api(`/api/works/${id}/copies`, { method: "POST", body: fd });
+  openWork(id);
+}
+
+async function addKw(id, plat) {
+  const words = document.getElementById("kwWords").value.trim();
+  if (!words) return alert("关键词不能空");
+  const fd = new FormData();
+  fd.append("platform", plat);
+  fd.append("words", words);
+  fd.append("note", document.getElementById("kwNote").value);
+  await api(`/api/works/${id}/keywords`, { method: "POST", body: fd });
+  openWork(id);
+}
+
+async function addAn(id, plat) {
+  const fd = new FormData();
+  fd.append("platform", plat);
+  fd.append("publish_time", document.getElementById("anTime").value.replace("T", " "));
+  fd.append("play_count", document.getElementById("anPlay").value || 0);
+  fd.append("account_count", document.getElementById("anAcc").value || 0);
+  fd.append("used_copy", document.getElementById("anCopy").value);
+  fd.append("used_title", document.getElementById("anTitle").value);
+  fd.append("account_names", document.getElementById("anNames").value);
+  fd.append("likes", document.getElementById("anLikes").value || 0);
+  fd.append("comments", document.getElementById("anCmt").value || 0);
+  fd.append("shares", document.getElementById("anShare").value || 0);
+  fd.append("notes", document.getElementById("anNotes").value);
+  await api(`/api/works/${id}/analytics`, { method: "POST", body: fd });
+  openWork(id); loadWorks();
+}
+
+async function delAsset(id, wid) { await api(`/api/assets/${id}`, {method:"DELETE"}); openWork(wid); loadWorks(); }
+async function delCopy(id, wid) { await api(`/api/copies/${id}`, {method:"DELETE"}); openWork(wid); }
+async function delKw(id, wid) { await api(`/api/keywords/${id}`, {method:"DELETE"}); openWork(wid); }
+async function delAn(id, wid) { await api(`/api/analytics/${id}`, {method:"DELETE"}); openWork(wid); loadWorks(); }
+
+async function renderDashboard() {
+  const s = window._stats || await api("/api/stats");
+  const acc = await api("/api/accounts");
+  const by = {};
+  (acc.items || []).forEach(a => {
+    (by[a.platform] = by[a.platform] || []).push(a);
+  });
+  document.getElementById("content").innerHTML = `
+    <div class="section">
+      <h4>登记找到的对方账号</h4>
+      <div class="row3">
+        <div><label>平台</label>
+          <select id="accPlat">${Object.entries(PLAT).map(([k,v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+        </div>
+        <div><label>账号 / 链接名</label><input id="accHandle" placeholder="@name 或频道名" /></div>
+        <div><label>显示名</label><input id="accName" placeholder="可选" /></div>
+      </div>
+      <div class="row3" style="margin-top:8px">
+        <div><label>主页链接</label><input id="accUrl" placeholder="https://" /></div>
+        <div><label>已知发布次数</label><input id="accPub" type="number" value="0" /></div>
+        <div><label>备注</label><input id="accNote" placeholder="竞品 / 搬运号 / 矩阵号" /></div>
+      </div>
+      <button class="btn primary" style="margin-top:10px" onclick="addFoundAcc()">写入账号库</button>
+    </div>
+    ${Object.keys(PLAT).map(p => `
+      <div class="section">
+        <h4>${PLAT[p]} · 已找到 ${(by[p]||[]).length} 个账号</h4>
+        <div class="list">${(by[p]||[]).map(a => `
+          <div class="item">
+            <div>
+              <b>@${esc(a.handle)}</b> <span class="badge">${esc(a.source)}</span>
+              <div class="small">${esc(a.display_name)} · 发布 ${a.publish_count} 次 · 最近 ${esc(a.last_seen)}
+${esc(a.profile_url)}
+${esc(a.note)}</div>
+            </div>
+            <button class="btn danger" onclick="delAcc(${a.id})">删</button>
+          </div>`).join("") || `<div class="small">还没有该平台账号。分析栏填写「账号名单」会自动入库，也可上面手录。</div>`}
+        </div>
+      </div>`).join("")}`;
+  document.getElementById("pager").innerHTML = "";
+}
+
+async function addFoundAcc() {
+  const fd = new FormData();
+  fd.append("platform", document.getElementById("accPlat").value);
+  fd.append("handle", document.getElementById("accHandle").value);
+  fd.append("display_name", document.getElementById("accName").value);
+  fd.append("profile_url", document.getElementById("accUrl").value);
+  fd.append("publish_count", document.getElementById("accPub").value || 0);
+  fd.append("note", document.getElementById("accNote").value);
+  fd.append("source", "found");
+  await api("/api/accounts", { method: "POST", body: fd });
+  await loadStats();
+  renderDashboard();
+}
+
+async function delAcc(id) {
+  await api(`/api/accounts/${id}`, { method: "DELETE" });
+  await loadStats();
+  renderDashboard();
+}
+
+async function renderHardware() {
+  const s = window._stats || await api("/api/stats");
+  const h = s.hardware;
+  document.getElementById("content").innerHTML = `
+    <div class="section hw">
+      <h4>测算前提</h4>
+      <p class="small">${esc(h.assumption)}</p>
+      <p style="margin-top:8px">当前入库 ${h.works_now} 部，已用素材 ${h.used_gb} GB。满库预估媒体约 <b>${h.projected_media_gb} GB</b>，建议磁盘 <b>${h.recommended_disk_gb} GB</b>（含备份与工作空间）。</p>
+    </div>
+    <div class="section hw">
+      <h4>可用服务器档位</h4>
+      <table>
+        <tr><th>档位</th><th>CPU</th><th>内存</th><th>磁盘</th><th>网络</th><th>GPU</th><th>适用</th></tr>
+        ${h.tiers.map(t => `<tr>
+          <td>${esc(t.name)}</td><td>${esc(t.cpu)}</td><td>${esc(t.ram)}</td>
+          <td>${esc(t.disk)}</td><td>${esc(t.net)}</td><td>${esc(t.gpu)}</td><td>${esc(t.suitable)}</td>
+        </tr>`).join("")}
+      </table>
+    </div>
+    <div class="section">
+      <h4>存储拆分（1000 部）</h4>
+      <div class="small">
+主片 1000 × 45MB ≈ 44 GB
+跨平台切片 1000 × 5 × 1.2 × 18MB ≈ 103 GB
+封面/分镜图 1000 × 5 × 3 × 0.35MB ≈ 5 GB
+封面抽帧与数据库 ≈ 4 GB
+合计媒体约 ${h.projected_media_gb} GB
+备份 + 转码临时目录按 2.2 倍预留 → 建议 ${h.recommended_disk_gb} GB NVMe
+      </div>
+    </div>
+    <div class="section">
+      <h4>本工具实际负载</h4>
+      <div class="small">
+这是素材库 + 分析库，不是对外点播站。瓶颈在上传、磁盘和偶尔 ffmpeg 探测时长。
+SQLite 对 1000 部及每部十几条记录完全足够。若以后和养号系统打通批量分发，再把媒体迁到对象存储，数据库换 PostgreSQL。
+推荐先按「8核 / 16G / 1TB NVMe」落地，马来西亚或新加坡机房均可，延迟对上传影响小于磁盘速度。
+      </div>
+    </div>`;
+  document.getElementById("pager").innerHTML = "";
+}
+
+document.getElementById("overlay").addEventListener("click", e => {
+  if (e.target.id === "overlay") closeDrawer();
+});
+const qEl = document.getElementById("q");
+if (qEl) qEl.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+refresh().catch(err => {
+  document.getElementById("content").innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+});
+</script>
+</body>
+</html>
