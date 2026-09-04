@@ -99,7 +99,7 @@ h1 { font-size: 22px; font-weight: 650; }
   .gauges { grid-template-columns: 1fr; }
   .plat-gauges { grid-template-columns: 1fr 1fr; }
 }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .card {
   background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px;
   cursor: pointer; transition: .15s transform, .15s border-color;
@@ -161,11 +161,6 @@ textarea { min-height: 84px; resize: vertical; }
     <nav class="nav" id="nav">
       <button class="active" data-view="dashboard"><span class="dot" style="background:#fbbf24"></span>数据仪表</button>
       <button data-view="library"><span class="dot" style="background:#5eead4"></span>作品总库</button>
-      <button data-view="facebook"><span class="dot" style="background:#1877f2"></span>Facebook</button>
-      <button data-view="twitter"><span class="dot" style="background:#e7e9ea"></span>推特 / X</button>
-      <button data-view="instagram"><span class="dot" style="background:#e1306c"></span>Instagram</button>
-      <button data-view="tiktok"><span class="dot" style="background:#25f4ee"></span>TikTok</button>
-      <button data-view="telegram"><span class="dot" style="background:#2aabee"></span>Telegram</button>
     </nav>
     <div class="tools" id="toolBar">
       <input id="q" placeholder="搜索标题 / 编号 / 剧名 / 关键词" />
@@ -177,7 +172,7 @@ textarea { min-height: 84px; resize: vertical; }
         <option value="archived">归档</option>
       </select>
       <button class="btn" onclick="doSearch()">搜索</button>
-      <button class="btn primary" onclick="openCreate()">+ 新建短剧</button>
+      <button class="btn primary" onclick="openCreate(selectedWorkId?{episode_no:window.currentNo||'',title:window.currentTitle||window.currentNo||''}:{})">+ 新建短剧</button>
       <a class="btn primary" href="/api/export/works.csv">导出分析表</a>
     </div>
   </aside>
@@ -207,10 +202,18 @@ const PLAT = {
   tiktok: "TikTok",
   telegram: "Telegram"
 };
-let view = "dashboard";
+let view = "library";
 let page = 1;
 let currentId = null;
 let currentPlat = "tiktok";
+let libTab = "clips";
+let selectedWorkId = null;
+async function keepScroll(fn){
+  const y = window.scrollY;
+  await fn();
+  requestAnimationFrame(()=>window.scrollTo(0,y));
+}
+
 
 document.getElementById("nav").addEventListener("click", e => {
   const b = e.target.closest("button");
@@ -256,7 +259,7 @@ async function refresh() {
   document.getElementById("gauges").style.display = showDash ? "" : "none";
   document.getElementById("stats").style.display = showDash ? "" : "none";
   if (showDash) return renderDashboard();
-  await loadWorks();
+  await keepScroll(loadWorks);
 }
 
 function ring(value, max, color) {
@@ -361,50 +364,156 @@ function doSearch() {
   const s = document.getElementById("stats");
   if (g) g.style.display = "none";
   if (s) s.style.display = "none";
+  keepScroll(loadWorks);
+}
+
+function libraryTabs(){
+  return `<div class="tabs">
+    <button class="${libTab==="clips"?"on":""}" onclick="libTab='clips';loadWorks()">切片成片</button>
+    <button class="${libTab==="analysis"?"on":""}" onclick="libTab='analysis';loadAnalysis()">分析对比</button>
+  </div>`;
+}
+async function loadAnalysis(){
+  view="library";
+  const box0 = document.getElementById("content");
+  box0.innerHTML = libraryTabs() + `<div class="section"><h4>分析对比编辑</h4><div class="small">一部短剧可增加多个分析对象，分别填不同平台或账号。</div></div>`;
+  let data;
+  try {
+    data = await api("/api/frames");
+  } catch (e) {
+    box0.innerHTML = libraryTabs() + `<div class="section"><h4>分析对比编辑</h4><div class="small">载入失败：${esc(String(e.message||e))}。请同时更新 app.py 后重启。</div></div>`;
+    return;
+  }
+  const box = document.getElementById("content");
+  const works = data.works||[];
+  let html = libraryTabs() + `
+    <div class="section">
+      <h4>分析对比</h4>
+      <div class="row">
+        <div><label>选择短剧</label>
+          <select id="anWork">${works.map(w=>`<option value="${w.id}">${esc(w.code)} · ${esc(w.title)}</option>`).join("")||"<option value=''>请先建短剧</option>"}</select></div>
+        <div><label>一次增加几个对象</label><input id="anCount" type="number" min="1" max="20" value="1"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn primary" onclick="addFrameFromLib()">+ 增加分析对象</button></div>
+      </div>
+    </div>`;
+  if (!works.length) {
+    html += `<div class="empty">请先在切片成片里新建短剧。</div>`;
+  } else {
+    for (const wsum of works) {
+      const one = await api("/api/works/"+wsum.id);
+      const frames = one.frames||[];
+      html += `<div class="section" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <h4>${esc(wsum.code)} · ${esc(wsum.title)} · 已有分析对象 ${frames.length} 个</h4>
+        <button class="btn primary" onclick="addFrameForWork(${wsum.id},1)">+ 再增加一个对象</button>
+      </div>`;
+      html += frames.map((f,i)=>frameCard(one.work, f, one.assets||[], i+1)).join("") || `<div class="small">还没有分析对象。</div>`;
+    }
+  }
+  box.innerHTML = html;
+  document.getElementById("pager").innerHTML = "";
+}
+
+async function addFrameForWork(wid, n){
+  n = Math.max(1, Math.min(20, Number(n||1)));
+  for (let i=0;i<n;i++){
+    const fd=new FormData(); fd.append("platform","");
+    await api(`/api/works/${wid}/frames`,{method:"POST",body:fd});
+  }
+  await keepScroll(loadAnalysis);
+}
+async function delWorkAnalysis(wid){
+  await api("/api/works/"+wid+"/frames",{method:"DELETE"});
+  await keepScroll(loadWorks);
+}
+async function delCardAsset(aid){
+  await api("/api/assets/"+aid,{method:"DELETE"});
+  await keepScroll(loadWorks);
+}
+async function addFrameFromLib(){
+  const wid = (document.getElementById("anWork")||{}).value;
+  if(!wid) return alert("请先有一部短剧");
+  const n = (document.getElementById("anCount")||{}).value || 1;
+  await addFrameForWork(wid, n);
+}
+
+function anFrames(w){
+  return (w.frames||[]).filter(f => (f.videos&&f.videos.length) || (f.images&&f.images.length));
+}
+function anCard(w){
+  const frames = anFrames(w);
+  if (!frames.length) return "";
+  return frames.map((f,i) => `
+      <div class="card" style="flex:1;min-width:240px;max-width:420px;border-color:#0f766e;position:relative">
+        <div class="code" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span style="color:#5eead4">${esc(w.code)} · 分析对比 ${i+1}</span>
+          <button class="btn danger" style="padding:4px 8px" onclick="event.stopPropagation();delOneAnalysis(${f.id},${w.id})">删除</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+          ${(f.videos||[]).map(a=>`<video src="${a.url}" controls preload="metadata" style="width:120px;height:160px;object-fit:cover;border-radius:10px;background:#000" onclick="event.stopPropagation()"></video>`).join("")}
+          ${(f.images||[]).map(a=>`<img src="${a.url}" style="width:120px;height:160px;object-fit:cover;border-radius:10px" onclick="event.stopPropagation()">`).join("")}
+        </div>
+        
+      </div>`).join("");
+}
+
+function shiftAn(wid, n){
+  window.anPage = window.anPage || {};
+  window.anPage[wid] = (window.anPage[wid]||0) + n;
   loadWorks();
+}
+async function delOneAnalysis(fid, wid){
+  await api("/api/frames/"+fid,{method:"DELETE"});
+  await keepScroll(loadWorks);
 }
 
 async function loadWorks() {
+  if (libTab === "analysis") return keepScroll(loadAnalysis);
   const q = document.getElementById("q").value.trim();
   const status = document.getElementById("status").value;
   const plat = view in PLAT ? view : "";
   const data = await api(`/api/works?q=${encodeURIComponent(q)}&status=${status}&platform=${plat}&page=${page}&page_size=24`);
   const box = document.getElementById("content");
+  window._workItems = data.items||[];
   if (!data.items.length) {
     box.innerHTML = `<div class="empty">暂无作品。点击右上角「新建短剧」入库。</div>`;
     document.getElementById("pager").innerHTML = "";
     return;
   }
-  box.innerHTML = `<div class="grid">${data.items.map(w => `
-    <div class="card" onclick="openWork(${w.id})">
-      <div class="code" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <span>${w.code} · ${({draft:'草稿',ready:'可分发',published:'已发布',archived:'归档'}[w.status]||w.status)}</span>
-        <button class="btn danger" title="删除" onclick="event.stopPropagation();delWork(${w.id})" style="padding:4px 8px;flex:none">删除</button>
+  if (!selectedWorkId) {
+    box.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(120px,1fr))">${data.items.map((w,i) => `
+      <div class="card" style="text-align:center;cursor:pointer;padding:22px 10px" onclick="openNumber(${w.id})">
+        <div style="font-size:44px;font-weight:800;color:#5eead4;line-height:1">${esc(w.episode_no || w.title || String((page-1)*24+i+1))}</div>
+        <div class="small" style="margin-top:8px">${esc(w.code)}</div>
+        <div class="small">${esc(w.series_name || "")}</div>
+      </div>`).join("")}</div>`;
+    const pages0 = Math.max(1, Math.ceil(data.total / data.page_size));
+    document.getElementById("pager").innerHTML = `
+      <button class="btn" onclick="page=Math.max(1,page-1);loadWorks()">上一页</button>
+      <span class="tag">${page} / ${pages0} · 共 ${data.total} 部</span>
+      <button class="btn" onclick="page=Math.min(${pages0},page+1);loadWorks()">下一页</button>`;
+    return;
+  }
+  const shown = data.items.filter(w => w.id === selectedWorkId);
+  const items = shown.length ? shown : data.items;
+  box.innerHTML = `<div style="margin-bottom:10px"><button class="btn" onclick="selectedWorkId=null;loadWorks()">返回编号列表</button></div><div class="grid">${items.map(w => `
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:stretch">
+      <div class="card" style="flex:1;min-width:0" onclick="openWork(${w.id})">
+        <div class="code" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span>${w.code} · 切片成片</span>
+          <button class="btn danger" title="删除" onclick="event.stopPropagation();delWork(${w.id})" style="padding:4px 8px;flex:none">删除</button>
+        </div>
+        <h3>${esc(w.title)}</h3>
+        ${(w.videos||[]).map(u=>`<video src="${u}" controls preload="metadata" style="width:100%;max-height:200px;border-radius:10px;background:#000;margin:6px 0" onclick="event.stopPropagation()"></video>`).join("")}
+        ${(w.images||[]).map(u=>`<img src="${u}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;margin:4px 4px 0 0" onclick="event.stopPropagation()">`).join("")}
+        <div class="meta" style="margin-top:8px">
+          ${((w.videos&&w.videos[0])||w.video_url) ? `<a class="btn primary" href="${(w.videos&&w.videos[0])||w.video_url}" download onclick="event.stopPropagation()">下载视频</a>` : ""}
+          ${((w.images&&w.images[0])||w.cover_url) ? `<a class="btn primary" href="${(w.images&&w.images[0])||w.cover_url}" download onclick="event.stopPropagation()">下载图片</a>` : ""}
+        </div>
       </div>
-      <h3>${esc(w.title)}</h3>
-      ${w.video_url ? `<video src="${w.video_url}" controls preload="metadata" draggable="true"
-        style="width:100%;max-height:220px;border-radius:10px;background:#000;margin:8px 0;cursor:grab"
-        onclick="event.stopPropagation();copyVideoLink('${w.video_url}')"
-        ondragstart="dragVideo(event,'${w.video_url}','${esc(w.title||"video")}')"></video>` : (w.cover_url?`<img src="${w.cover_url}" style="width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin:8px 0">`:``)}
-      <div class="meta" style="margin-top:8px">
-        ${w.video_url ? `<a class="btn primary" href="${w.video_url}" download onclick="event.stopPropagation()">下载视频</a>` : ""}
-        ${w.cover_url ? `<a class="btn primary" href="${w.cover_url}" download onclick="event.stopPropagation()">下载图片</a>` : ""}
-        <label class="btn" onclick="event.stopPropagation()" style="cursor:pointer">添加图片
-          <input type="file" accept="image/*" style="display:none" onchange="addCardImage(event,${w.id})">
-        </label>
-      </div>
-      ${(w.images&&w.images.length)?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${w.images.map(u=>`<a href="${u}" download onclick="event.stopPropagation()"><img src="${u}" style="width:88px;height:88px;object-fit:cover;border-radius:8px;background:#000"></a>`).join("")}</div>`:""}
-      <div class="meta">
-        <span class="tag">${esc(w.series_name || "单集")}</span>
-        <span class="tag">${w.duration_sec || 60}s</span>
-        <span class="tag">视频 ${w.video_count}</span>
-        <span class="tag">图 ${w.image_count}</span>
-        <span class="tag">切片 ${w.clip_count}</span>
-        <span class="tag">文案 ${w.copy_count}</span>
-        <span class="tag">播放 ${Number(w.total_plays).toLocaleString()}</span>
-        <span class="tag">账号 ${w.total_accounts}</span>
-      </div>
-    </div>`).join("")}</div>`;
+            ${anCard(w)}
+
+    </div>
+`).join("")}</div>`;
   const pages = Math.max(1, Math.ceil(data.total / data.page_size));
   document.getElementById("pager").innerHTML = `
     <button class="btn" onclick="page=Math.max(1,page-1);loadWorks()">上一页</button>
@@ -416,10 +525,22 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
 
-function openCreate() {
+function openNumber(id){
+  selectedWorkId = id;
+  const it = (window._workItems||[]).find(x=>x.id===id);
+  if (it){ window.currentNo = it.episode_no || it.title || ""; window.currentTitle = it.title || ""; }
+  loadWorks();
+}
+function openCreate(pref = {}) {
   currentId = null;
+  const no = pref.episode_no || window.currentNo || "";
   document.getElementById("overlay").classList.add("show");
-  document.getElementById("drawer").innerHTML = workForm();
+  document.getElementById("drawer").innerHTML = workForm({
+    episode_no: no,
+    title: pref.title || window.currentTitle || "",
+    series_name: pref.series_name || "",
+    entry_side: pref.entry_side || "slice"
+  });
 }
 
 async function openWork(id) {
@@ -433,19 +554,43 @@ function closeDrawer() {
   document.getElementById("overlay").classList.remove("show");
 }
 
-function workForm(w = {}) {
+function workForm(w = {}, assets = []) {
+  const sliceV = (assets||[]).filter(a => (a.asset_type==="video" || a.asset_type==="clip") && !a.frame_id);
+  const sliceI = (assets||[]).filter(a => a.asset_type==="image" && !a.frame_id);
+  const frameV = (assets||[]).filter(a => (a.asset_type==="video" || a.asset_type==="clip") && a.frame_id);
+  const frameI = (assets||[]).filter(a => a.asset_type==="image" && a.frame_id);
+  const one = (arr, kind) => arr.map(a => kind==="v"
+    ? `<div><video src="${a.url}" controls preload="metadata" style="width:180px;max-height:140px;background:#000;border-radius:8px"></video><div class="small">${esc(a.filename||"视频")}</div></div>`
+    : `<div><img src="${a.url}" style="width:88px;height:88px;object-fit:cover;border-radius:8px"><div class="small">${esc(a.filename||"图片")}</div></div>`).join("");
+  const mediaBox = w.id ? `
+      <div style="margin-top:10px"><label>切片视频 / 图片</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">${one(sliceV,"v")}${one(sliceI,"i") || ""} ${(sliceV.length||sliceI.length)?"":'<div class="small">还没有切片素材，用下面的选择文件后点保存作品</div>'}</div>
+      </div>
+      <div style="margin-top:10px"><label style="color:#5eead4">分析对比 · 视频 / 图片</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">${one(frameV,"v")}${one(frameI,"i")}${(frameV.length||frameI.length)?"":'<div class="small">还没有分析框架素材</div>'}</div>
+      </div>` : "";
+
   return `
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <h2>${w.id ? "编辑短剧 " + esc(w.code) : "新建短剧"}</h2>
+      <h2>${w.id ? "切片对比分析编辑 " + esc(w.code) : "新建短剧"}</h2>
       <button class="btn ghost" onclick="closeDrawer()">关闭</button>
     </div>
     <div class="section">
       <div class="row">
+        <div><label>作品总库编号 *</label><input name="episode_no" placeholder="1 / 2 / 3 ..." value="${esc(w.episode_no||"")}" /></div>
+        <div><label>入库到</label>
+          <select name="entry_side">
+            <option value="slice" ${w.entry_side==="analysis"?"":"selected"}>切片成片</option>
+            <option value="analysis" ${w.entry_side==="analysis"?"selected":""}>分析对比</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
         <div><label>标题 *</label><input name="title" value="${esc(w.title||"")}" /></div>
         <div><label>剧名 / 系列</label><input name="series_name" value="${esc(w.series_name||"")}" /></div>
       </div>
       <div class="row3" style="margin-top:8px">
-        <div><label>集数</label><input name="episode_no" value="${esc(w.episode_no||"")}" /></div>
+        <div><label>备注集数</label><input name="ep_note" value="" placeholder="可选" />
         <div><label>时长（秒）</label><input name="duration_sec" type="number" value="${w.duration_sec||60}" /></div>
         <div><label>状态</label>
           <select name="status">
@@ -461,6 +606,7 @@ function workForm(w = {}) {
         <input name="master_keywords" value="${esc(w.master_keywords||"")}" /></div>
       <div style="margin-top:8px"><label>简介</label>
         <textarea name="description">${esc(w.description||"")}</textarea></div>
+      ${mediaBox}
       <div class="row" style="margin-top:10px">
         <div><label>从本地添加成片视频</label>
           <input id="localVideo" type="file" accept="video/*" /></div>
@@ -490,6 +636,7 @@ async function uploadLocalFiles(wid, pack) {
     fd.append("platform", plat);
     fd.append("asset_type", typ);
     if (typ === "clip") fd.append("highlight_note", "新建时本地切片");
+    if (window._newFrameId) fd.append("frame_id", window._newFrameId);
     await api(`/api/works/${wid}/assets`, { method: "POST", body: fd });
   }
 }
@@ -510,14 +657,32 @@ async function saveWork(id) {
   if (btn) { btn.disabled = true; btn.textContent = "保存中..."; }
   const fd = new FormData();
   box.querySelectorAll("input[name],select[name],textarea[name]").forEach(el => fd.append(el.name, el.value));
-  if (!fd.get("title")) { if (btn) { btn.disabled=false; btn.textContent="保存作品"; } return alert("请填写标题"); }
+  if (!fd.get("episode_no")) { if (btn) { btn.disabled=false; btn.textContent="保存作品"; } return alert("请填写作品总库编号"); }
+  if (!fd.get("title")) fd.set("title", fd.get("episode_no"));
   let wid = id;
   try {
     if (id) {
       await api(`/api/works/${id}`, { method: "PUT", body: fd });
     } else {
-      const r = await api("/api/works", { method: "POST", body: fd });
-      wid = r.id;
+      const no = (fd.get("episode_no")||"").trim();
+      const side = fd.get("entry_side")||"slice";
+      const listed = await api("/api/works?q="+encodeURIComponent(no));
+      const hit = (listed.items||[]).find(w => String(w.episode_no)===no || String(w.title)===no);
+      if (hit) {
+        wid = hit.id;
+        await api(`/api/works/${wid}`, { method: "PUT", body: fd });
+      } else {
+        const r = await api("/api/works", { method: "POST", body: fd });
+        wid = r.id;
+      }
+      if (side==="analysis") {
+        const ff=new FormData(); ff.append("platform","");
+        const fr = await api(`/api/works/${wid}/frames`,{method:"POST",body:ff});
+        window._newFrameId = fr.id; window.anPage=window.anPage||{}; window.anPage[wid]=999;
+      } else {
+        window._newFrameId = 0;
+      }
+      selectedWorkId = wid; window.currentNo = no;
     }
     const pack = grabLocalFiles();
     view = "library";
@@ -529,14 +694,14 @@ async function saveWork(id) {
     if (g) g.style.display = "none";
     if (s) s.style.display = "none";
     closeDrawer();
-    loadWorks();
+    keepScroll(loadWorks);
     if (btn) btn.textContent = "正在上传视频...";
     try {
       await uploadLocalFiles(wid, pack);
     } catch (ue) {
       console.error(ue);
     }
-    loadWorks();
+    keepScroll(loadWorks);
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "保存作品"; }
     alert("保存失败：" + e.message);
@@ -546,19 +711,107 @@ async function saveWork(id) {
 async function delWork(id) {
   await api(`/api/works/${id}`, { method: "DELETE" });
   closeDrawer();
-  loadWorks();
+  keepScroll(loadWorks);
 }
 
 function renderDrawer(data) {
   const w = data.work;
-  currentPlat = currentPlat in PLAT ? currentPlat : "tiktok";
+  const frames = data.frames || [];
+  const assets = data.assets || [];
   document.getElementById("drawer").innerHTML = `
-    ${workForm(w)}
-    <div class="tabs">
-      ${Object.entries(PLAT).map(([k,v]) => `<button class="${k===currentPlat?"on":""}" onclick="currentPlat='${k}';openWork(${w.id})">${v}</button>`).join("")}
-    </div>
-    ${platformPanel(w, data, currentPlat)}
+    ${workForm(w, assets)}
   `;
+}
+
+function frameAssets(assets, fid, typ) {
+  return (assets || []).filter(a => String(a.frame_id||0) === String(fid) && a.asset_type === typ);
+}
+
+function frameCard(w, f, assets, n) {
+  const vids = frameAssets(assets, f.id, "video");
+  const imgs = frameAssets(assets, f.id, "image");
+  return `
+    <div class="section" id="frame-${f.id}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h4>分析对象 ${n}</h4>
+        <button class="btn danger" onclick="delFrame(${f.id},${w.id})">删除本对象</button>
+      </div>
+      <div class="row">
+        <div><label>6. 平台（手动填写）</label>
+          <input id="fp-${f.id}" placeholder="TikTok / Facebook / 自定义平台名" value="${esc(f.platform||"")}" /></div>
+        <div><label>5. 发布时间</label>
+          <input id="ft-${f.id}" type="datetime-local" value="${esc((f.publish_time||"").replace(" ","T").slice(0,16))}" /></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>1. 本框视频（仅本框架）</label>
+          <input type="file" accept="video/*" onchange="upFrameAsset(${w.id},${f.id},'video',this)" />
+          <div class="list" style="margin-top:8px">${vids.map(assetItem).join("") || `<div class="small">未上传视频</div>`}</div>
+        </div>
+        <div>
+          <label>1. 本框图片（仅本框架）</label>
+          <input type="file" accept="image/*" onchange="upFrameAsset(${w.id},${f.id},'image',this)" />
+          <div class="list" style="margin-top:8px">${imgs.map(assetItem).join("") || `<div class="small">未上传图片</div>`}</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>2. 文案标题</label><input id="fc-${f.id}" placeholder="发布标题 / 文案标题" value="${esc(f.copy_title||"")}" /></div>
+        <div><label>2. 关键词</label><input id="fk-${f.id}" placeholder="关键词，逗号分隔" value="${esc(f.keywords||"")}" /></div>
+      </div>
+      <div style="margin-top:10px"><label>4. 正文</label>
+        <textarea id="fb-${f.id}" placeholder="正文、话题、引导语">${esc(f.body||"")}</textarea></div>
+      <div class="row3" style="margin-top:10px">
+        <div><label>3. 播放量</label><input id="fplay-${f.id}" type="number" value="${f.play_count||0}" /></div>
+        <div><label>3. 转帖 / 转发次数</label><input id="frep-${f.id}" type="number" value="${f.repost_count||0}" /></div>
+        <div><label>3. 发布账号数</label><input id="facc-${f.id}" type="number" value="${f.account_count||0}" /></div>
+      </div>
+      <div style="margin-top:10px"><label>备注</label>
+        <input id="fn-${f.id}" placeholder="投放时段、完播、测试备注" value="${esc(f.notes||"")}" /></div>
+      <button class="btn primary" style="margin-top:12px" onclick="saveFrame(${f.id},${w.id})">保存本框</button>
+    </div>`;
+}
+
+async function addFrame(wid) {
+  const fd = new FormData();
+  fd.append("platform", "");
+  await api(`/api/works/${wid}/frames`, {method:"POST", body:fd});
+  openWork(wid);
+}
+
+async function saveFrame(fid, wid) {
+  const fd = new FormData();
+  fd.append("platform", (document.getElementById("fp-"+fid)||{}).value || "");
+  fd.append("copy_title", (document.getElementById("fc-"+fid)||{}).value || "");
+  fd.append("keywords", (document.getElementById("fk-"+fid)||{}).value || "");
+  fd.append("body", (document.getElementById("fb-"+fid)||{}).value || "");
+  fd.append("publish_time", ((document.getElementById("ft-"+fid)||{}).value || "").replace("T"," "));
+  fd.append("play_count", (document.getElementById("fplay-"+fid)||{}).value || 0);
+  fd.append("repost_count", (document.getElementById("frep-"+fid)||{}).value || 0);
+  fd.append("account_count", (document.getElementById("facc-"+fid)||{}).value || 0);
+  fd.append("notes", (document.getElementById("fn-"+fid)||{}).value || "");
+  await api(`/api/frames/${fid}`, {method:"PUT", body:fd});
+  if (libTab==="analysis") await keepScroll(loadAnalysis);
+  else { openWork(wid); await keepScroll(loadWorks); }
+}
+
+async function delFrame(fid, wid) {
+  await api(`/api/frames/${fid}`, {method:"DELETE"});
+  if (libTab==="analysis") await keepScroll(loadAnalysis);
+  else if (wid) { openWork(wid); await keepScroll(loadWorks); }
+}
+
+async function upFrameAsset(wid, fid, typ, input) {
+  const f = input.files[0];
+  if (!f) return;
+  const plat = (document.getElementById("fp-"+fid)||{}).value || "";
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("platform", plat);
+  fd.append("asset_type", typ);
+  fd.append("frame_id", fid);
+  await api(`/api/works/${wid}/assets`, {method:"POST", body:fd});
+  if (libTab==="analysis") await keepScroll(loadAnalysis);
+  else { openWork(wid); await keepScroll(loadWorks); }
 }
 
 function platformPanel(w, data, p) {
@@ -677,7 +930,7 @@ async function upAsset(id, plat, type, input) {
   fd.append("asset_type", type);
   fd.append("caption", "");
   await api(`/api/works/${id}/assets`, { method: "POST", body: fd });
-  openWork(id); loadWorks();
+  openWork(id); keepScroll(loadWorks);
 }
 
 async function upClip(id, plat, input) {
@@ -691,7 +944,7 @@ async function upClip(id, plat, input) {
   fd.append("highlight_note", document.getElementById("clipNote").value);
   fd.append("clip_copy", document.getElementById("clipCopy").value);
   await api(`/api/works/${id}/assets`, { method: "POST", body: fd });
-  openWork(id); loadWorks();
+  openWork(id); keepScroll(loadWorks);
 }
 
 async function addCopy(id, plat) {
@@ -731,17 +984,18 @@ async function addAn(id, plat) {
   fd.append("shares", document.getElementById("anShare").value || 0);
   fd.append("notes", document.getElementById("anNotes").value);
   await api(`/api/works/${id}/analytics`, { method: "POST", body: fd });
-  openWork(id); loadWorks();
+  openWork(id); keepScroll(loadWorks);
 }
 
-async function delAsset(id, wid) { await api(`/api/assets/${id}`, {method:"DELETE"}); openWork(wid); loadWorks(); }
+async function delAsset(id, wid) { await api(`/api/assets/${id}`, {method:"DELETE"}); openWork(wid); keepScroll(loadWorks); }
 async function delCopy(id, wid) { await api(`/api/copies/${id}`, {method:"DELETE"}); openWork(wid); }
 async function delKw(id, wid) { await api(`/api/keywords/${id}`, {method:"DELETE"}); openWork(wid); }
-async function delAn(id, wid) { await api(`/api/analytics/${id}`, {method:"DELETE"}); openWork(wid); loadWorks(); }
+async function delAn(id, wid) { await api(`/api/analytics/${id}`, {method:"DELETE"}); openWork(wid); keepScroll(loadWorks); }
 
 async function renderDashboard() {
   const s = window._stats || await api("/api/stats");
-  const acc = await api("/api/accounts");
+  let acc = {items:[]};
+  try { acc = await api("/api/accounts"); } catch(e) { acc = {items:[]}; }
   const by = {};
   (acc.items || []).forEach(a => {
     (by[a.platform] = by[a.platform] || []).push(a);

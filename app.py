@@ -49,8 +49,19 @@ def init():
       note TEXT DEFAULT '', publish_count INTEGER DEFAULT 0, last_seen TEXT,
       UNIQUE(platform,handle));
     CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
+    CREATE TABLE IF NOT EXISTS frames(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, work_id INTEGER, platform TEXT DEFAULT '',
+      copy_title TEXT DEFAULT '', keywords TEXT DEFAULT '', body TEXT DEFAULT '',
+      publish_time TEXT DEFAULT '', play_count INTEGER DEFAULT 0,
+      repost_count INTEGER DEFAULT 0, account_count INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '', created_at TEXT);
     """)
-    c.commit(); c.close()
+    c.commit()
+    cols = [r[1] for r in c.execute("PRAGMA table_info(assets)").fetchall()]
+    if "frame_id" not in cols:
+        c.execute("ALTER TABLE assets ADD COLUMN frame_id INTEGER")
+        c.commit()
+    c.close()
 
 def split_handles(s):
     out, seen = [], set()
@@ -221,20 +232,34 @@ def works(q: str = "", page: int = 1):
         (SELECT COUNT(*) FROM copies x WHERE x.work_id=w.id) copy_count,
         (SELECT COALESCE(SUM(play_count),0) FROM analytics an WHERE an.work_id=w.id) total_plays,
         (SELECT COALESCE(SUM(account_count),0) FROM analytics an WHERE an.work_id=w.id) total_accounts,
-        (SELECT '/media/'||a.rel_path FROM assets a WHERE a.work_id=w.id AND a.asset_type='video' ORDER BY a.id DESC LIMIT 1) video_url,
+        (SELECT '/media/'||a.rel_path FROM assets a WHERE a.work_id=w.id AND a.asset_type IN ('video','clip') ORDER BY a.id DESC LIMIT 1) video_url,
         (SELECT '/media/'||a.rel_path FROM assets a WHERE a.work_id=w.id AND a.asset_type='image' ORDER BY a.id DESC LIMIT 1) cover_url
       FROM works w
-      WHERE w.title LIKE ? OR w.code LIKE ? OR IFNULL(w.master_keywords,'') LIKE ?
+      WHERE w.title LIKE ? OR w.code LIKE ? OR IFNULL(w.episode_no,'') LIKE ? OR IFNULL(w.series_name,'') LIKE ? OR IFNULL(w.master_keywords,'') LIKE ?
       ORDER BY w.id DESC LIMIT 50 OFFSET ?
-    """, (like,like,like,(page-1)*50)).fetchall()
+    """, (like,like,like,like,like,(page-1)*50)).fetchall()
     total = c.execute("SELECT COUNT(*) n FROM works").fetchone()["n"]
     items = []
     for r in rows:
         d = dict(r)
-        imgs = c.execute("SELECT '/media/'||rel_path AS url FROM assets WHERE work_id=? AND asset_type='image' ORDER BY id DESC", (d["id"],)).fetchall()
-        d["images"] = [x["url"] for x in imgs]
-        if d.get("images") and not d.get("cover_url"):
-            d["cover_url"] = d["images"][0]
+        def urls(typ, framed, with_id=False):
+            q = "SELECT id, '/media/'||rel_path AS url FROM assets WHERE work_id=? AND asset_type IN ({}) AND {} ORDER BY id DESC".format(
+                ",".join("?"*len(typ)), "IFNULL(frame_id,0)>0" if framed else "IFNULL(frame_id,0)=0")
+            rows = c.execute(q, (d["id"],)+tuple(typ)).fetchall()
+            if with_id:
+                return [{"id":x["id"],"url":x["url"]} for x in rows]
+            return [x["url"] for x in rows]
+        d["videos"] = urls(("video","clip"), False)
+        d["images"] = urls(("image",), False)
+        d["frame_videos"] = urls(("video","clip"), True, True)
+        d["frame_images"] = urls(("image",), True, True)
+        frs = [dict(x) for x in c.execute("SELECT * FROM frames WHERE work_id=? ORDER BY id ASC", (d["id"],))]
+        for f in frs:
+            f["videos"] = [{"id":x["id"],"url":"/media/"+x["rel_path"]} for x in c.execute("SELECT id,rel_path FROM assets WHERE frame_id=? AND asset_type IN ('video','clip')", (f["id"],))]
+            f["images"] = [{"id":x["id"],"url":"/media/"+x["rel_path"]} for x in c.execute("SELECT id,rel_path FROM assets WHERE frame_id=? AND asset_type='image'", (f["id"],))]
+        d["frames"] = frs
+        d["video_url"] = (d["videos"] or [None])[0]
+        d["cover_url"] = (d["images"] or [None])[0]
         items.append(d)
     c.close()
     return {"total":total,"page":page,"page_size":50,"items":items}
@@ -258,14 +283,16 @@ def one(wid: int):
     keywords = [dict(x) for x in c.execute("SELECT * FROM keywords WHERE work_id=? ORDER BY id DESC",(wid,))]
     assets = [dict(x) for x in c.execute("SELECT * FROM assets WHERE work_id=? ORDER BY id DESC",(wid,))]
     analytics = [dict(x) for x in c.execute("SELECT * FROM analytics WHERE work_id=? ORDER BY id DESC",(wid,))]
+    frames = [dict(x) for x in c.execute("SELECT * FROM frames WHERE work_id=? ORDER BY id ASC",(wid,))]
     c.close()
     grouped = {p:{"videos":[],"images":[],"clips":[]} for p in PLAT}
     for a in assets:
         a["url"] = "/media/"+a["rel_path"]
         bucket = {"video":"videos","image":"images","clip":"clips"}.get(a["asset_type"])
-        if a["platform"] in grouped and bucket:
+        if a.get("platform") in grouped and bucket:
             grouped[a["platform"]][bucket].append(a)
-    return {"work":dict(w),"copies":copies,"keywords":keywords,"assets_by_platform":grouped,"analytics":analytics}
+    return {"work":dict(w),"copies":copies,"keywords":keywords,"assets":[dict(a) for a in assets],
+            "assets_by_platform":grouped,"analytics":analytics,"frames":frames}
 
 @app.put("/api/works/{wid}")
 def upd(wid: int, title: str = Form(...), series_name: str = Form(""), episode_no: str = Form(""),
@@ -280,10 +307,64 @@ def upd(wid: int, title: str = Form(...), series_name: str = Form(""), episode_n
 def dw(wid: int):
     c = conn(); c.execute("DELETE FROM works WHERE id=?", (wid,)); c.commit(); c.close(); return {"ok":True}
 
+@app.get("/api/frames")
+def list_frames():
+    c = conn()
+    rows = c.execute("""SELECT f.*, w.title AS work_title, w.code AS work_code
+                        FROM frames f JOIN works w ON w.id=f.work_id
+                        ORDER BY f.id DESC""").fetchall()
+    items=[]
+    for r in rows:
+        d=dict(r)
+        d["videos"]=[x["url"] for x in c.execute("SELECT '/media/'||rel_path AS url FROM assets WHERE frame_id=? AND asset_type IN ('video','clip')", (d["id"],))]
+        d["images"]=[x["url"] for x in c.execute("SELECT '/media/'||rel_path AS url FROM assets WHERE frame_id=? AND asset_type='image'", (d["id"],))]
+        items.append(d)
+    works=[{"id":x["id"],"title":x["title"],"code":x["code"]} for x in c.execute("SELECT id,title,code FROM works ORDER BY id DESC")]
+    c.close()
+    return {"items":items,"works":works}
+
+@app.post("/api/works/{wid}/frames")
+def add_frame(wid: int, platform: str = Form(""), copy_title: str = Form(""), keywords: str = Form(""),
+              body: str = Form(""), publish_time: str = Form(""), play_count: int = Form(0),
+              repost_count: int = Form(0), account_count: int = Form(0), notes: str = Form("")):
+    c = conn()
+    cur = c.execute("""INSERT INTO frames(work_id,platform,copy_title,keywords,body,publish_time,play_count,repost_count,account_count,notes,created_at)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    (wid, platform.strip() or "未填平台", copy_title, keywords, body, publish_time, play_count, repost_count, account_count, notes, now()))
+    c.commit(); fid = cur.lastrowid; c.close()
+    return {"ok": True, "id": fid}
+
+@app.put("/api/frames/{fid}")
+def upd_frame(fid: int, platform: str = Form(""), copy_title: str = Form(""), keywords: str = Form(""),
+              body: str = Form(""), publish_time: str = Form(""), play_count: int = Form(0),
+              repost_count: int = Form(0), account_count: int = Form(0), notes: str = Form("")):
+    c = conn()
+    c.execute("""UPDATE frames SET platform=?,copy_title=?,keywords=?,body=?,publish_time=?,play_count=?,repost_count=?,account_count=?,notes=? WHERE id=?""",
+              (platform.strip() or "未填平台", copy_title, keywords, body, publish_time, play_count, repost_count, account_count, notes, fid))
+    c.commit(); c.close(); return {"ok": True}
+
+@app.delete("/api/works/{wid}/frames")
+def del_work_frames(wid: int):
+    c = conn()
+    ids = [r["id"] for r in c.execute("SELECT id FROM frames WHERE work_id=?", (wid,))]
+    if ids:
+        c.execute("DELETE FROM assets WHERE frame_id IN (%s)" % ",".join("?"*len(ids)), ids)
+        c.execute("DELETE FROM frames WHERE work_id=?", (wid,))
+    c.commit(); c.close()
+    return {"ok": True}
+
+@app.delete("/api/frames/{fid}")
+def del_frame(fid: int):
+    c = conn()
+    c.execute("UPDATE assets SET frame_id=NULL WHERE frame_id=?", (fid,))
+    c.execute("DELETE FROM frames WHERE id=?", (fid,))
+    c.commit(); c.close(); return {"ok": True}
+
 @app.post("/api/works/{wid}/assets")
-async def up(wid: int, platform: str = Form(...), asset_type: str = Form(...),
+async def up(wid: int, platform: str = Form(""), asset_type: str = Form(...),
              caption: str = Form(""), source_platform: str = Form(""),
-             highlight_note: str = Form(""), clip_copy: str = Form(""), file: UploadFile = File(...)):
+             highlight_note: str = Form(""), clip_copy: str = Form(""),
+             frame_id: int = Form(0), file: UploadFile = File(...)):
     kind = {"video":"videos","image":"images","clip":"clips"}[asset_type]
     suf = Path(file.filename or "f.bin").suffix or ".bin"
     name = datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8] + suf
@@ -294,9 +375,9 @@ async def up(wid: int, platform: str = Form(...), asset_type: str = Form(...),
             if not b: break
             f.write(b); size += len(b)
     c = conn()
-    c.execute("""INSERT INTO assets(work_id,platform,asset_type,filename,rel_path,size_bytes,source_platform,highlight_note,clip_copy,created_at)
-                 VALUES(?,?,?,?,?,?,?,?,?,?)""",
-              (wid,platform,asset_type,file.filename,f"{kind}/{name}",size,source_platform,highlight_note,clip_copy,now()))
+    c.execute("""INSERT INTO assets(work_id,platform,asset_type,filename,rel_path,size_bytes,source_platform,highlight_note,clip_copy,created_at,frame_id)
+                 VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+              (wid,platform or "",asset_type,file.filename,f"{kind}/{name}",size,source_platform,highlight_note,clip_copy,now(), frame_id or None))
     c.commit(); c.close()
     return {"ok":True,"url":f"/media/{kind}/{name}"}
 
