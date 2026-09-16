@@ -249,8 +249,8 @@ def works(q: str = "", page: int = 1):
             if with_id:
                 return [{"id":x["id"],"url":x["url"]} for x in rows]
             return [x["url"] for x in rows]
-        d["videos"] = urls(("video","clip"), False)
-        d["images"] = urls(("image",), False)
+        d["videos"] = urls(("video","clip"), False, True)
+        d["images"] = urls(("image",), False, True)
         d["frame_videos"] = urls(("video","clip"), True, True)
         d["frame_images"] = urls(("image",), True, True)
         frs = [dict(x) for x in c.execute("SELECT * FROM frames WHERE work_id=? ORDER BY id ASC", (d["id"],))]
@@ -258,8 +258,8 @@ def works(q: str = "", page: int = 1):
             f["videos"] = [{"id":x["id"],"url":"/media/"+x["rel_path"]} for x in c.execute("SELECT id,rel_path FROM assets WHERE frame_id=? AND asset_type IN ('video','clip')", (f["id"],))]
             f["images"] = [{"id":x["id"],"url":"/media/"+x["rel_path"]} for x in c.execute("SELECT id,rel_path FROM assets WHERE frame_id=? AND asset_type='image'", (f["id"],))]
         d["frames"] = frs
-        d["video_url"] = (d["videos"] or [None])[0]
-        d["cover_url"] = (d["images"] or [None])[0]
+        d["video_url"] = ((d["videos"][0]["url"] if d["videos"] else None))
+        d["cover_url"] = ((d["images"][0]["url"] if d["images"] else None))
         items.append(d)
     c.close()
     return {"total":total,"page":page,"page_size":50,"items":items}

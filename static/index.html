@@ -449,8 +449,14 @@ function anCard(w){
           <button class="btn danger" style="padding:4px 8px" onclick="event.stopPropagation();delOneAnalysis(${f.id},${w.id})">删除</button>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-          ${(f.videos||[]).map(a=>`<video src="${a.url}" controls preload="metadata" style="width:120px;height:160px;object-fit:cover;border-radius:10px;background:#000" onclick="event.stopPropagation()"></video>`).join("")}
-          ${(f.images||[]).map(a=>`<img src="${a.url}" style="width:120px;height:160px;object-fit:cover;border-radius:10px" onclick="event.stopPropagation()">`).join("")}
+          ${(f.videos||[]).map(a=>`<div style="position:relative" onclick="event.stopPropagation()">
+            <video src="${a.url}" controls preload="metadata" style="width:120px;height:160px;object-fit:cover;border-radius:10px;background:#000"></video>
+            ${a.id?`<button class="btn danger" style="position:absolute;top:4px;right:4px;padding:2px 6px" onclick="delCardAsset(${a.id})">删除</button>`:""}
+          </div>`).join("")}
+          ${(f.images||[]).map(a=>`<div style="position:relative" onclick="event.stopPropagation()">
+            <img src="${a.url}" style="width:120px;height:160px;object-fit:cover;border-radius:10px">
+            ${a.id?`<button class="btn danger" style="position:absolute;top:4px;right:4px;padding:2px 6px" onclick="delCardAsset(${a.id})">删除</button>`:""}
+          </div>`).join("")}
         </div>
         
       </div>`).join("");
@@ -503,11 +509,17 @@ async function loadWorks() {
           <button class="btn danger" title="删除" onclick="event.stopPropagation();delWork(${w.id})" style="padding:4px 8px;flex:none">删除</button>
         </div>
         <h3>${esc(w.title)}</h3>
-        ${(w.videos||[]).map(u=>`<video src="${u}" controls preload="metadata" style="width:100%;max-height:200px;border-radius:10px;background:#000;margin:6px 0" onclick="event.stopPropagation()"></video>`).join("")}
-        ${(w.images||[]).map(u=>`<img src="${u}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;margin:4px 4px 0 0" onclick="event.stopPropagation()">`).join("")}
+        ${(w.videos||[]).map(a=>`<div style="position:relative;margin:6px 0" onclick="event.stopPropagation()">
+          <video src="${a.url||a}" controls preload="metadata" style="width:100%;max-height:200px;border-radius:10px;background:#000"></video>
+          ${a.id?`<button class="btn danger" style="position:absolute;top:8px;right:8px;padding:4px 8px" onclick="delCardAsset(${a.id})">删除</button>`:""}
+        </div>`).join("")}
+        ${(w.images||[]).map(a=>`<div style="position:relative;display:inline-block;margin:4px 4px 0 0" onclick="event.stopPropagation()">
+          <img src="${a.url||a}" style="width:72px;height:72px;object-fit:cover;border-radius:8px">
+          ${a.id?`<button class="btn danger" style="position:absolute;top:2px;right:2px;padding:2px 6px" onclick="delCardAsset(${a.id})">删除</button>`:""}
+        </div>`).join("")}
         <div class="meta" style="margin-top:8px">
-          ${((w.videos&&w.videos[0])||w.video_url) ? `<a class="btn primary" href="${(w.videos&&w.videos[0])||w.video_url}" download onclick="event.stopPropagation()">下载视频</a>` : ""}
-          ${((w.images&&w.images[0])||w.cover_url) ? `<a class="btn primary" href="${(w.images&&w.images[0])||w.cover_url}" download onclick="event.stopPropagation()">下载图片</a>` : ""}
+          ${((w.videos&&w.videos[0]&&(w.videos[0].url||w.videos[0]))||w.video_url) ? `<a class="btn primary" href="${(w.videos[0].url||w.videos[0])||w.video_url}" download onclick="event.stopPropagation()">下载视频</a>` : ""}
+          ${((w.images&&w.images[0]&&(w.images[0].url||w.images[0]))||w.cover_url) ? `<a class="btn primary" href="${(w.images[0].url||w.images[0])||w.cover_url}" download onclick="event.stopPropagation()">下载图片</a>` : ""}
         </div>
       </div>
             ${anCard(w)}
