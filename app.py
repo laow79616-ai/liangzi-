@@ -236,7 +236,7 @@ def works(q: str = "", page: int = 1):
         (SELECT '/media/'||a.rel_path FROM assets a WHERE a.work_id=w.id AND a.asset_type='image' ORDER BY a.id DESC LIMIT 1) cover_url
       FROM works w
       WHERE w.title LIKE ? OR w.code LIKE ? OR IFNULL(w.episode_no,'') LIKE ? OR IFNULL(w.series_name,'') LIKE ? OR IFNULL(w.master_keywords,'') LIKE ?
-      ORDER BY w.id DESC LIMIT 50 OFFSET ?
+      ORDER BY CAST(NULLIF(w.episode_no,'') AS INTEGER) ASC, CAST(NULLIF(w.title,'') AS INTEGER) ASC, w.id ASC LIMIT 50 OFFSET ?
     """, (like,like,like,like,like,(page-1)*50)).fetchall()
     total = c.execute("SELECT COUNT(*) n FROM works").fetchone()["n"]
     items = []

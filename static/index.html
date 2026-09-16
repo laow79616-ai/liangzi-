@@ -444,8 +444,8 @@ function anCard(w){
   if (!frames.length) return "";
   return frames.map((f,i) => `
       <div class="card" style="flex:1;min-width:240px;max-width:420px;border-color:#0f766e;position:relative">
-        <div class="code" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <span style="color:#5eead4">${esc(w.code)} · 分析对比 ${i+1}</span>
+        <div class="code" style="display:flex;justify-content:center;align-items:center;position:relative;min-height:32px">
+          <span style="color:#5eead4;position:absolute;left:0">${esc(w.code)} · 分析对比 ${i+1}</span>
           <button class="btn danger" style="padding:4px 8px" onclick="event.stopPropagation();delOneAnalysis(${f.id},${w.id})">删除</button>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
@@ -479,7 +479,13 @@ async function loadWorks() {
   const plat = view in PLAT ? view : "";
   const data = await api(`/api/works?q=${encodeURIComponent(q)}&status=${status}&platform=${plat}&page=${page}&page_size=24`);
   const box = document.getElementById("content");
-  window._workItems = data.items||[];
+  window._workItems = (data.items||[]).slice().sort((a,b)=>{
+    const na=parseInt(a.episode_no||a.title||0,10)||0;
+    const nb=parseInt(b.episode_no||b.title||0,10)||0;
+    if(na!==nb) return na-nb;
+    return (a.id||0)-(b.id||0);
+  });
+  data.items = window._workItems;
   if (!data.items.length) {
     box.innerHTML = `<div class="empty">暂无作品。点击右上角「新建短剧」入库。</div>`;
     document.getElementById("pager").innerHTML = "";
@@ -504,9 +510,9 @@ async function loadWorks() {
   box.innerHTML = `<div style="margin-bottom:10px"><button class="btn" onclick="selectedWorkId=null;loadWorks()">返回编号列表</button></div><div class="grid">${items.map(w => `
     <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:stretch">
       <div class="card" style="flex:1;min-width:0" onclick="openWork(${w.id})">
-        <div class="code" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <span>${w.code} · 切片成片</span>
-          <button class="btn danger" title="删除" onclick="event.stopPropagation();delWork(${w.id})" style="padding:4px 8px;flex:none">删除</button>
+        <div class="code" style="display:flex;justify-content:center;align-items:center;position:relative;min-height:32px">
+          <span style="position:absolute;left:0">${w.code} · 切片成片</span>
+          <button class="btn danger" title="删除" onclick="event.stopPropagation();delWork(${w.id})" style="padding:4px 8px">删除</button>
         </div>
         <h3>${esc(w.title)}</h3>
         ${(w.videos||[]).map(a=>`<div style="position:relative;margin:6px 0" onclick="event.stopPropagation()">
