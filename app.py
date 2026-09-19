@@ -92,6 +92,11 @@ def upsert_acc(c, plat, names, extra=0):
 
 init()
 app = FastAPI()
+try:
+    from shop import router as shop_router
+    app.include_router(shop_router)
+except Exception as e:
+    print("shop not mounted", e)
 ADMIN_USER = "admin"
 ADMIN_PASS = "Ab123987"
 SESSIONS = set()
@@ -127,6 +132,8 @@ p.addEventListener('keydown',ev=>{if(ev.key==='Enter')go()});
 async def auth_gate(request: Request, call_next):
     path = request.url.path
     if path in ("/login", "/api/login", "/health"):
+        return await call_next(request)
+    if path.startswith("/tg/") or path.startswith("/shop") or path.startswith("/api/shop") or path.startswith("/static/shop"):
         return await call_next(request)
     if request.cookies.get("clip_sess") in SESSIONS:
         return await call_next(request)

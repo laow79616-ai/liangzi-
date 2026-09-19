@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>短剧商店</title>
+<style>
+:root{--bg:#0b1220;--card:#121826;--line:#273044;--txt:#e8eef7;--mut:#8b9bb4;--teal:#0f766e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:18px}
+h1,h3{margin:0}.small{color:var(--mut);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:4px}
+input,select{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:#0b1220;color:var(--txt)}
+.btn{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:#1b2434;color:var(--txt);cursor:pointer}
+.btn.primary{background:var(--teal);border-color:#14b8a6}.btn.danger{background:#7f1d1d;border-color:#ef4444}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{border-bottom:1px solid var(--line);padding:8px;text-align:left}
+a{color:#5eead4}
+#lock{position:fixed;inset:0;background:#0b1220ee;display:none;align-items:center;justify-content:center;z-index:9}
+#lock .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;width:320px}
+img.qr{max-width:180px;border-radius:10px;margin-top:8px;background:#fff;padding:6px}
+.head{display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+#cfgBody.fold,.fold{display:none}
+.layout{display:grid;grid-template-columns:380px 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.tg{background:#1a2e24;border-radius:18px;overflow:hidden;border:1px solid #2d4a3c}
+.tg-banner{background:#14352c;padding:14px;display:flex;gap:12px;align-items:center;color:#fff}
+.tg-logo{width:56px;height:56px;border-radius:50%;background:#0f766e;display:flex;align-items:center;justify-content:center;font-weight:800}
+.tg-body{background:#fff;color:#222;padding:14px;font-size:14px;line-height:1.55}
+.tg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px;background:#dceee4}
+.tg-grid button{background:#2ea36a;color:#fff;border:0;border-radius:10px;padding:12px 8px;font-size:13px;cursor:pointer}
+.tg-nav{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:8px 10px 12px;background:#eef6f1}
+.tg-nav button{background:#fff;border:0;border-radius:10px;padding:10px 8px;font-size:12px;color:#333;cursor:pointer}
+iframe.view{width:100%;height:520px;border:0;border-radius:10px;background:#fff}
+</style></head>
+<body>
+<div id="lock"><div class="box"><h3>商店密码</h3><div class="small">保护收款账号</div>
+<input id="loginPw" type="password" style="margin:12px 0"><button class="btn primary" onclick="login()">进入</button></div></div>
+<div class="wrap">
+<h1>短剧商店机器人</h1>
+<div class="small">点左侧按钮进入对应编辑页 · 结算 USD</div>
+<div class="card">
+  <div class="head" onclick="toggleCfg()"><h3>接入设置</h3><span class="small" id="cfgHint">点击展开 / 收起</span></div>
+  <div id="cfgBody">
+    <div class="row" style="margin-top:12px">
+      <div><label>Bot Token</label><input id="bot_token"></div>
+      <div><label>Bot 用户名</label><input id="bot_username"></div>
+      <div><label>收款账号 / TRC20</label><input id="pay_account" placeholder="T..."></div>
+      <div><label>TRC20 地址</label><input id="pay_trc20" placeholder="T开头"></div>
+      <div><label>客服 Telegram</label><input id="cs_telegram" placeholder="@kefu"></div>
+      <div><label>启用机器人</label><select id="enabled"><option value="0">关闭</option><option value="1">开启</option></select></div>
+      <div><label>商店登录密码</label><input id="shop_password" type="password" placeholder="留空不改"></div>
+      <div><label>收款二维码</label><input id="qr" type="file" accept="image/*"></div>
+      <div><label>Bot 封面图</label><input id="cover" type="file" accept="image/*"></div>
+      <div><label>当前文件</label><div class="small" id="files"></div></div>
+    </div>
+    <div style="margin-top:10px"><button class="btn primary" onclick="saveCfg()">保存配置</button>
+    <button class="btn" onclick="setHook()">绑定 Webhook</button></div>
+  </div>
+</div>
+<div class="layout">
+  <div class="tg">
+    <div class="tg-banner"><div class="tg-logo">剧</div><div><div style="font-weight:700">短剧商店</div><div class="small">按剧情分类 · USD</div></div></div>
+    <div class="tg-body">点按钮进入编辑。充值看出账账号与二维码，记录同步全部订单。</div>
+    <div class="tg-grid">
+      <button type="button" onclick="openPanel('cat','urban')">现代都市</button>
+      <button type="button" onclick="openPanel('cat','costume')">古装传奇</button>
+      <button type="button" onclick="openPanel('cat','xianxia')">仙侠玄幻</button>
+      <button type="button" onclick="openPanel('cat','scifi')">科幻脑洞</button>
+      <button type="button" onclick="openPanel('cat','mystery')">灵异悬疑</button>
+      <button type="button" onclick="openPanel('cat','other')">其他短剧</button>
+      <button type="button" onclick="openPanel('pay')">充值余额</button>
+      <button type="button" onclick="openPanel('orders')">购买记录</button>
+      <button type="button" onclick="openPanel('okx')">欧易转换教程</button>
+      <button type="button" onclick="openPanel('notice')">购买须知</button>
+    </div>
+    <div class="tg-nav">
+      <button type="button" onclick="openPanel('home')">主菜单</button>
+      <button type="button" onclick="openPanel('search')">搜索短剧</button>
+      <button type="button" onclick="openPanel('cs')">联系客服</button>
+    </div>
+  </div>
+  <div class="card" id="work"><h3 id="workTitle">主菜单</h3><div id="workBody" class="small">点击左侧按钮。</div></div>
+</div>
+</div>
+<script>
+const CATN={urban:"现代都市",costume:"古装传奇",xianxia:"仙侠玄幻",scifi:"科幻脑洞",mystery:"灵异悬疑",other:"其他短剧"};
+let CFG={}, cfgUnlocked=false;
+function toggleCfg(force){
+  const body=document.getElementById("cfgBody");
+  if(force==="fold") body.classList.add("fold");
+  else if(force==="open") body.classList.remove("fold");
+  else {
+    if(body.classList.contains("fold") && !cfgUnlocked){ lock.style.display="flex"; lock.dataset.next="openCfg"; return; }
+    body.classList.toggle("fold");
+  }
+  cfgHint.textContent = body.classList.contains("fold") ? "已收起 · 点击展开" : "点击收起";
+}
+async function api(url,opt){
+  const r=await fetch(url,opt);
+  if(r.status===401){ lock.style.display="flex"; throw new Error("need pass"); }
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function login(){
+  const fd=new FormData(); fd.append("password", loginPw.value);
+  const d=await (await fetch("/api/shop/login",{method:"POST",body:fd})).json();
+  if(!d.ok) return alert(d.msg||"失败");
+  cfgUnlocked=true; lock.style.display="none";
+  if(lock.dataset.next==="openCfg"){ toggleCfg("open"); lock.dataset.next=""; }
+  loadCfg();
+}
+async function loadCfg(){
+  CFG=await api("/api/shop/config");
+  bot_username.value=CFG.bot_username||"";
+  pay_account.value=CFG.pay_account||CFG.okx_uid||"";
+  if(document.getElementById("pay_trc20")) pay_trc20.value=CFG.pay_trc20||"";
+  cs_telegram.value=CFG.cs_telegram||"";
+  enabled.value=CFG.enabled?"1":"0";
+  files.innerHTML=CFG.qr_url?`<img class="qr" src="${CFG.qr_url}">`:"未上传收款二维码";
+  if(CFG.pay_account||CFG.has_password) toggleCfg("fold");
+}
+async function saveCfg(){
+  const fd=new FormData();
+  ["bot_token","bot_username","pay_account","pay_trc20","cs_telegram","enabled","shop_password"].forEach(k=>fd.append(k,document.getElementById(k).value));
+  fd.append("okx_uid", pay_account.value);
+  if(qr.files[0]) fd.append("qr", qr.files[0]);
+  if(cover.files[0]) fd.append("cover", cover.files[0]);
+  await api("/api/shop/config",{method:"POST",body:fd});
+  await loadCfg(); toggleCfg("fold");
+}
+async function setHook(){
+  const fd=new FormData(); fd.append("public_url","https://liangzi.icu");
+  alert(JSON.stringify(await api("/api/shop/set-webhook",{method:"POST",body:fd})));
+}
+async function officeView(kind, url){
+  const d=await api("/api/shop/slides?kind="+kind).catch(()=>({items:[]}));
+  const items=d.items||[];
+  const imgs=items.map(u=>`<img src="${u}" style="width:100%;max-width:420px;border-radius:10px;margin:8px 0;background:#fff;display:block">`).join("");
+  if(!items.length) return "<div class='small'>还没有图片，请选择后点上传。</div>";
+  return `<div class="head" onclick="this.nextElementSibling.classList.toggle('fold')" style="margin-top:10px">
+      <span>已上传 ${items.length} 张 · 点击展开/收起</span><span class="small">折叠</span></div>
+    <div class="fold">${imgs}</div>`;
+}
+async function productForm(cat){
+  const d=await api("/api/shop/products?cat="+encodeURIComponent(cat));
+  const rows=(d.items||[]).slice().sort((a,b)=>Number(a.episode_no||a.work_code||0)-Number(b.episode_no||b.work_code||0));
+  return `<div class="row3"><div><label>手机显示编号 #</label><input id="sku" placeholder="7"></div>
+    <div><label>标题</label><input id="title" placeholder="本集标题"></div>
+    <div><label>价格 USD</label><input id="price" type="number" step="0.01" value="9.9"></div>
+    <div><label>集数</label><input id="episode_no" type="number" min="1" step="1" placeholder="1"></div>
+    <div><label>上传封面</label><input id="epCover" type="file" accept="image/*"></div>
+    <div><label>上传本集短剧</label><input id="epVideo" type="file" accept="video/*"></div></div>
+    <button class="btn primary" style="margin-top:10px" onclick="addP('${cat}')">上架到${CATN[cat]}</button>
+    <table style="margin-top:12px"><tr><th>#</th><th>集</th><th>标题</th><th>USD</th><th>封面</th><th>短剧</th><th></th></tr>
+    ${rows.map(p=>`<tr><td>#${p.sku||p.id}</td><td>第${p.episode_no||"-"}集</td><td>${p.title}</td><td>${p.price_usd}</td>
+      <td>${p.cover_url?`<img src="${p.cover_url}" style="height:48px;border-radius:6px">`:"无"}</td>
+      <td>${p.video_url?`<a href="${p.video_url}" target="_blank">片源</a>`:"无"}</td>
+      <td><button class="btn primary" onclick="buyEp(${p.id},'${cat}')">买</button>
+          <button class="btn danger" onclick="delP(${p.id},'${cat}')">删</button></td></tr>`).join("")||"<tr><td colspan=7>还没有集数</td></tr>"}</table>
+    <div id="payBox" style="margin-top:16px"></div>`;
+}
+async function openPanel(kind, extra){
+  const t=document.getElementById("workTitle"), b=document.getElementById("workBody");
+  if(kind==="home"){
+    t.textContent="主菜单";
+    const d=await api("/api/shop/products"), o=await api("/api/shop/orders");
+    b.innerHTML=`<div class="small">全部商品 ${(d.items||[]).length} · 订单 ${(o.items||[]).length}</div>
+      <table style="margin-top:10px"><tr><th>分类</th><th>标题</th><th>USD</th></tr>
+      ${(d.items||[]).map(p=>`<tr><td>${CATN[p.cat]||p.cat}</td><td>${p.title}</td><td>${p.price_usd}</td></tr>`).join("")||"<tr><td colspan=3>暂无</td></tr>"}</table>`;
+  } else if(kind==="cat"){
+    t.textContent=CATN[extra]+" · 上架编辑"; b.innerHTML=await productForm(extra);
+  } else if(kind==="pay"){
+    t.textContent="充值余额 · USD 收款";
+    const w=await api("/api/shop/wallet");
+    b.innerHTML=`<p>当前余额：<b>${w.balance} USD</b></p>
+      <div><label>充值金额 USD</label><input id="reAmt" type="number" step="0.01" value="10"></div>
+      <button class="btn primary" style="margin-top:8px" onclick="doRecharge()">生成充值单</button>
+      <div id="reBox" style="margin-top:12px"></div><button class="btn" style="margin-top:8px" onclick="scanChain()">核对链上入账</button>
+      <p>收款账号：<b>${CFG.pay_account||"（未填）"}</b></p>
+      ${CFG.qr_url?`<img class="qr" src="${CFG.qr_url}">`:"<div class='small'>未上传收款二维码</div>"}
+      <p class="small">先充值到账，再回分类点「用余额买这集」。</p>`;
+  } else if(kind==="orders"){
+    t.textContent="购买记录";
+    const d=await api("/api/shop/orders");
+    b.innerHTML=`<table><tr><th>单号</th><th>商品</th><th>USD</th><th>状态</th><th>TG</th><th></th></tr>
+      ${(d.items||[]).map(o=>`<tr><td>${o.order_no}</td><td>${o.title}</td><td>${o.amount_usd}</td><td>${o.status}</td><td>${o.tg_id||""}</td>
+      <td>${o.status!=="paid"?`<button class="btn primary" onclick="mark(${o.id})">确认到账</button>`:""}</td></tr>`).join("")||"<tr><td colspan=6>暂无记录</td></tr>"}</table>`;
+  } else if(kind==="okx"){
+    t.textContent="欧易转换 USD 教程";
+    const slides=await officeView('okx', CFG.ppt_url);
+    b.innerHTML=`<div><label>上传教程图片（可多张）</label>
+      <input id="okxImgs" type="file" accept="image/*" multiple>
+      <button class="btn primary" style="margin-top:8px" onclick="upOkxImgs()">上传图片</button></div>
+      <div id="okxGallery" style="margin-top:12px">${slides}</div>`;
+  }
+  else if(kind==="notice"){
+    t.textContent="购买须知";
+    const slides=await officeView('notice', CFG.notice_url);
+    b.innerHTML=`<div><label>上传须知图片（可多张）</label>
+      <input id="noticeImgs" type="file" accept="image/*" multiple>
+      <button class="btn primary" style="margin-top:8px" onclick="upNoticeImgs()">上传图片</button></div>
+      <div id="noticeGallery" style="margin-top:12px">${slides}</div>`;
+  }
+  else if(kind==="search"){
+    t.textContent="搜索短剧";
+    b.innerHTML=`<input id="sq" placeholder="关键词 / 标题 / 编号" onkeydown="if(event.key==='Enter')doSearch()">
+      <button class="btn primary" style="margin-top:8px" onclick="doSearch()">搜索</button><div id="sres"></div>`;
+  } else if(kind==="cs"){
+    t.textContent="联系客服";
+    const handle=(CFG.cs_telegram||"").replace(/^@/,"");
+    b.innerHTML=`<div><label>TRC20 地址</label><input id="pay_trc20" placeholder="T开头"></div>
+      <div><label>客服 Telegram</label>
+      <input id="csUser" value="${handle?("@"+handle):""}" placeholder="@kefu"></div>
+      <div style="margin-top:10px"><label>备注（工作时间 / 说明）</label>
+      <textarea id="csNote" rows="5" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:#0b1220;color:var(--txt)">${CFG.cs_note||""}</textarea></div>
+      <button class="btn primary" style="margin-top:10px" onclick="saveCs()">保存客服备注</button>
+      ${handle?`<p style="margin-top:12px"><a href="https://t.me/${handle}" target="_blank">打开 Telegram @${handle}</a></p>`:""}`;
+  }
+}
+async function doSearch(){
+  const q=(document.getElementById("sq")||{}).value||"";
+  const d=await api("/api/shop/products?q="+encodeURIComponent(q));
+  document.getElementById("sres").innerHTML=`<table style="margin-top:10px"><tr><th>分类</th><th>标题</th><th>USD</th><th>绑定</th></tr>
+    ${(d.items||[]).map(p=>`<tr><td>${CATN[p.cat]||p.cat}</td><td>${p.title}</td><td>${p.price_usd}</td><td>${p.work_code||""}</td></tr>`).join("")||"<tr><td colspan=4>没有结果</td></tr>"}</table>`;
+}
+async function upOkxImgs(){
+  const el=document.getElementById('okxImgs');
+  if(!el||!el.files.length) return alert('请选择图片');
+  let ok=0, err='';
+  for(const f of [...el.files]){
+    const fd=new FormData(); fd.append('files', f);
+    try{
+      const r=await fetch('/api/shop/okx-images',{method:'POST',body:fd});
+      const d=await r.json();
+      if(d.ok) ok+=(d.saved||[1]).length; else err=d.msg||('HTTP '+r.status);
+    }catch(e){ err=String(e); }
+  }
+  alert('已保存 '+ok+' 张'+(err?(' / '+err):''));
+  openPanel('okx');
+}
+async function upNoticeImgs(){
+  const el=document.getElementById('noticeImgs');
+  if(!el||!el.files.length) return alert('请选择图片');
+  const fd=new FormData();
+  [...el.files].forEach(f=>fd.append('files', f));
+  await api('/api/shop/notice-images',{method:'POST',body:fd});
+  openPanel('notice');
+}
+async function saveCs(){
+  const fd=new FormData();
+  fd.append('cs_telegram', (csUser.value||''));
+  fd.append('cs_note', (csNote.value||''));
+  fd.append('pay_account', CFG.pay_account||'');
+  fd.append('bot_username', CFG.bot_username||'');
+  fd.append('enabled', CFG.enabled?'1':'0');
+  await api('/api/shop/config',{method:'POST',body:fd});
+  await loadCfg(); openPanel('cs');
+}
+async function scanChain(){alert(JSON.stringify(await api('/api/shop/chain-check',{method:'POST'})));openPanel('pay');}
+async function doRecharge(){
+  const amt=parseFloat((reAmt.value||"0"));
+  const d=await api("/api/shop/recharge",{method:"POST",body:(()=>{const f=new FormData();f.append("amount_usd",amt);return f;})()});
+  reBox.innerHTML=`<p>充值单 ${d.order_no} · ${d.amount_usd} USD</p>
+    <p>收款账号：<b>${d.pay_account||""}</b></p>${d.qr_url?`<img class="qr" src="${d.qr_url}">`:""}
+    <button class="btn primary" onclick="confirmRecharge(${d.order_id})">确认到账并入余额</button>`;
+}
+async function confirmRecharge(oid){
+  await api("/api/shop/orders/"+oid+"/paid",{method:"POST"});
+  openPanel("pay");
+}
+async function buyEp(pid,cat){
+  const d=await api("/api/shop/buy",{method:"POST",body:(()=>{const f=new FormData();f.append("product_id",pid);return f;})()});
+  const box=document.getElementById("payBox");
+  if(d.need_recharge || d.ok===false){
+    box.innerHTML=`<div class="card" style="margin:0"><p>余额 ${d.balance||0} USD，本集 ${d.amount_usd} USD，请先充值。</p>
+      <p>收款账号：<b>${d.pay_account||""}</b></p>${d.qr_url?`<img class="qr" src="${d.qr_url}">`:""}
+      <p class="small">去左侧「充值余额」到账后再点购买。</p></div>`;
+    return;
+  }
+  box.innerHTML=`<div class="card" style="margin:0">
+    <p>已用余额购买第${d.episode_no||""}集 · ${d.title} · ${d.amount_usd} USD</p>
+    <p class="small">剩余 ${d.balance} USD · 订单 ${d.order_no}</p>
+    ${d.video_url?`<video src="${d.video_url}" controls playsinline style="width:100%;max-height:420px;border-radius:12px;background:#000"></video>`:"本集还没有视频"}
+  </div>`;
+}
+async function confirmPay(oid){
+  const d=await api("/api/shop/orders/"+oid+"/paid",{method:"POST"});
+  const el=document.getElementById("paidPlayer");
+  if(d.video_url){
+    el.innerHTML=`<div class="small">已支付，立即播放本集</div>
+      <video src="${d.video_url}" controls playsinline style="width:100%;max-height:420px;border-radius:12px;background:#000;margin-top:8px"></video>`;
+  } else {
+    el.innerHTML="<div class='small'>已确认支付，但本集还没有上传视频。</div>";
+  }
+}
+async function addP(cat){
+  const fd=new FormData();
+  fd.append("cat",cat); fd.append("title",title.value); fd.append("price_usd",price.value);
+  fd.append("episode_no", episode_no.value||"");
+  fd.append("sku", (sku.value||"").replace("#",""));
+  fd.append("work_code", episode_no.value||"");
+  const v=document.getElementById("epVideo");
+  if(v && v.files[0]) fd.append("video", v.files[0]);
+  const cv=document.getElementById("epCover");
+  if(cv && cv.files[0]) fd.append("cover", cv.files[0]);
+  await api("/api/shop/products",{method:"POST",body:fd}); openPanel("cat",cat);
+}
+async function delP(id,cat){await api("/api/shop/products/"+id,{method:"DELETE"}); openPanel("cat",cat)}
+async function mark(id){await api("/api/shop/orders/"+id+"/paid",{method:"POST"}); openPanel("orders")}
+loadCfg().then(function(){openPanel("home")}).catch(function(){ lock.style.display="none"; openPanel("home").catch(function(){}); });
+</script>
+</body></html>
